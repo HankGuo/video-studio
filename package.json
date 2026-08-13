@@ -1,0 +1,43 @@
+{
+  "name": "video-studio",
+  "version": "1.0.0",
+  "description": "AI 视频工坊 - 基于 MiniMax H3 的本地视频创作工具",
+  "main": "main/main.js",
+  "license": "MIT",
+  "author": "算力白肉",
+  "scripts": {
+    "start": "electron .",
+    "pack:dmg": "electron-builder --mac dmg --arm64"
+  },
+  "build": {
+    "appId": "com.personal.videostudio",
+    "productName": "VideoStudio",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main/**",
+      "renderer/**",
+      "assets/**"
+    ],
+    "mac": {
+      "category": "public.app-category.video",
+      "identity": null,
+      "icon": "assets/icon.icns",
+      "target": [
+        "dmg"
+      ]
+    },
+    "dmg": {
+      "title": "AI 视频工坊",
+      "window": {
+        "width": 540,
+        "height": 380
+      }
+    }
+  },
+  "devDependencies": {
+    "electron": "^43.4.0",
+    "electron-builder": "^26.15.3"
+  }
+}

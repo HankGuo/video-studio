@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' file: data:; media-src 'self' file:; style-src 'self' 'unsafe-inline'" />
+  <title>AI 视频工坊</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
+        <rect x="2" y="6" width="20" height="20" rx="4" fill="none" stroke="#2F3437" stroke-width="2"/>
+        <path d="M11 12.5v7l6-3.5z" fill="#2F3437"/>
+        <rect x="19" y="2" width="9" height="9" rx="2" fill="#C2643A"/>
+      </svg>
+      <div class="brand-text">
+        <h1>AI 视频工坊</h1>
+        <span class="brand-sub">MINIMAX H3 · 本地创作台</span>
+      </div>
+    </div>
+    <div class="topbar-actions">
+      <button id="btn-submit-all" class="btn btn-ghost hidden">
+        <svg viewBox="0 0 16 16"><path d="M3 8h9M8.5 4.5 12 8l-3.5 3.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        提交全部草稿<span id="draft-count" class="draft-count"></span>
+      </button>
+      <button id="btn-settings" class="btn btn-ghost">
+        <svg viewBox="0 0 16 16"><path d="M8 5.4a2.6 2.6 0 1 0 0 5.2 2.6 2.6 0 0 0 0-5.2Z" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M13.3 8c0-.3 0-.6-.1-.9l1.2-.9-1.2-2-1.4.6a5.4 5.4 0 0 0-1.5-.9L10 2.5H6l-.3 1.4a5.4 5.4 0 0 0-1.5.9l-1.4-.6-1.2 2 1.2.9a5.6 5.6 0 0 0 0 1.8l-1.2.9 1.2 2 1.4-.6c.5.4 1 .7 1.5.9L6 13.5h4l.3-1.4a5.4 5.4 0 0 0 1.5-.9l1.4.6 1.2-2-1.2-.9c.1-.3.1-.6.1-.9Z" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg>
+        设置
+      </button>
+      <button id="btn-new" class="btn btn-primary">
+        <svg viewBox="0 0 16 16"><path d="M8 3v10M3 8h10" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        新建片段
+      </button>
+    </div>
+  </header>
+
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="sidebar-head">
+        <span class="sidebar-title">创作队列</span>
+        <span id="queue-count" class="queue-count">0</span>
+      </div>
+      <div id="task-list" class="task-list"></div>
+    </aside>
+    <main id="detail" class="detail"></main>
+  </div>
+
+  <div id="settings-modal" class="modal-mask hidden">
+    <div class="modal">
+      <header class="modal-head">
+        <h2>全局设置</h2>
+        <button id="btn-settings-close" class="icon-btn" aria-label="关闭">
+          <svg viewBox="0 0 16 16"><path d="m4 4 8 8M12 4l-8 8" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+        </button>
+      </header>
+      <div class="modal-body">
+        <div class="field">
+          <span class="field-label">接入点</span>
+          <input id="set-endpoint" type="text" spellcheck="false" autocomplete="off" />
+          <span class="field-hint">MiniMax V2 网关地址，提交与查询均走该地址</span>
+        </div>
+        <div class="field">
+          <span class="field-label">API Key</span>
+          <div class="key-row">
+            <input id="set-apikey" type="password" spellcheck="false" autocomplete="off" />
+            <button id="set-toggle-key" class="btn btn-ghost btn-sm">显示</button>
+          </div>
+        </div>
+        <div class="settings-test">
+          <button id="btn-test-conn" class="btn btn-ghost btn-sm">测试连接</button>
+          <span id="test-result" class="test-result"></span>
+        </div>
+      </div>
+      <footer class="modal-foot">
+        <span class="field-hint">保存后立即生效，本地保存在应用数据目录</span>
+        <button id="btn-settings-save" class="btn btn-primary">保存设置</button>
+      </footer>
+    </div>
+  </div>
+
+  <div id="toasts" class="toasts"></div>
+  <script src="app.js"></script>
+</body>
+</html>
