@@ -111,4 +111,6 @@ node test/smoke.js
 
 一个很懒的博主：年更、月更、不定期更。偶尔发发心得，偶尔发发广子，反正都是随意发挥。喜欢的可以关注一下。
 
+配套公众号文章（本项目的完整故事）：[《你的 API Key 是不是又在吃灰？》](https://mp.weixin.qq.com/s/DZIaSGb60VXe2NdTmChWiQ)，欢迎阅读、点赞、转发，希望大家支持。
+
 ![公众号「算力白肉」二维码](docs/wechat-qr.jpg)
