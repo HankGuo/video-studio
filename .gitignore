@@ -2,3 +2,9 @@ node_modules/
 dist/
 test/shots/
 .DS_Store
+
+# 公众号素材（仅本地，不入库）
+docs/wechat-article.html
+docs/wechat-cover.png
+test/make-cover.js
+test/render-article.js
