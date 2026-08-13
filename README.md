@@ -20,7 +20,7 @@
 
 ## 下载与安装
 
-1. 在 Releases 页面下载 `VideoStudio-x.x.x-arm64.dmg`（Apple Silicon）。
+1. 前往 [Releases 页面](https://github.com/HankGuo/video-studio/releases) 下载最新版安装包（当前版本 [v1.0.0](https://github.com/HankGuo/video-studio/releases/tag/v1.0.0)，文件 `VideoStudio-1.0.0-arm64.dmg`，Apple Silicon）。
 2. 打开 DMG，把 VideoStudio 拖入「应用程序」文件夹。
 3. 首次打开如提示"无法验证开发者"：在「应用程序」中右键应用图标 →「打开」即可（应用未做付费签名，源码完全公开，可放心自查）。
 4. 首次启动会自动引导你进入「设置」：填入你在词元跳动平台的 API Key，点击「测试连接」确认后保存。
@@ -87,6 +87,9 @@
 ## 本地开发与测试
 
 ```bash
+git clone https://github.com/HankGuo/video-studio.git
+cd video-studio
+
 npm install
 npm start          # 开发模式运行
 npm run pack:dmg   # 打包 DMG 安装包
