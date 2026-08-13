@@ -101,9 +101,9 @@ VIDEO_STUDIO_TEST_KEY=sk-xxx node test/e2e.js
 node test/smoke.js
 ```
 
-## 致谢 Kimi Code
+## 致谢 WorkBuddy × Kimi K3
 
-本项目从产品形态决策、架构设计、编码实现，到多轮真实 API 端到端测试、UI 走查与 DMG 打包交付，**全程由 [Kimi Code](https://www.kimi.com/) 独立完成**。感谢 Kimi 团队的出色工作，这本身就是一次"AI 造 AI 工具"的完整实践。
+本项目从产品形态决策、架构设计、编码实现，到多轮真实 API 端到端测试、UI 走查与 DMG 打包交付，**全程由 [WorkBuddy](https://www.codebuddy.cn/work/)（腾讯云 CodeBuddy 团队出品的桌面 AI 智能体）搭载 Kimi K3 模型独立完成**。作者只负责提需求、喝茶和验收。感谢 WorkBuddy 团队与月之暗面的出色工作，这本身就是一次"AI 造 AI 工具"的完整实践。
 
 ## 关注博主「算力白肉」
 
