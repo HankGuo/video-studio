@@ -4,7 +4,8 @@ const path = require('path');
 const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
 const { SettingsStore } = require('./settings');
 const { TaskManager } = require('./tasks');
-const api = require('./api');
+const { testConnection } = require('./protocols');
+const { listModels } = require('./models');
 
 // 允许通过环境变量覆盖数据目录（测试隔离用）
 if (process.env.VIDEO_STUDIO_USER_DATA) {
@@ -48,9 +49,9 @@ function createWindow() {
     height: 840,
     minWidth: 1080,
     minHeight: 700,
-    title: 'AI 视频工坊',
+    title: 'TokenDance 视频接入助手',
     titleBarStyle: 'hiddenInset',
-    backgroundColor: '#F7F5F0',
+    backgroundColor: '#09090B',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -82,7 +83,9 @@ app.whenReady().then(() => {
 
   handle('settings:get', () => settings.get());
   handle('settings:save', (patch) => settings.save(patch));
-  handle('settings:test', (draft) => api.testConnection({ ...settings.get(), ...(draft || {}) }));
+  handle('settings:test', (draft) => testConnection({ ...settings.get(), ...(draft || {}) }));
+
+  handle('models:list', () => listModels());
 
   handle('tasks:list', () => tasks.list());
   handle('task:create', (config) => tasks.create(config || {}));

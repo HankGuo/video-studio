@@ -4,39 +4,34 @@
 
 const $ = (sel, el = document) => el.querySelector(sel);
 
-const MODE_LABEL = { text: '文生视频', image: '图生视频', reference: '参考生视频' };
-const MODE_DESC = {
-  text: '纯文字描述生成画面',
-  image: '以图片作为首帧 / 首尾帧',
-  reference: '参考图 / 视频 / 音频生成',
-};
+const MODE_LABEL = { text: '文生视频', image: '图生视频', reference: '参考生视频', edit: '视频编辑' };
 const STATUS_LABEL = {
-  draft: '待提交', submitting: '提交中', queued: '排队中', running: '生成中',
+  draft: '草稿', submitting: '提交中', queued: '排队中', running: '生成中',
   succeeded: '已完成', failed: '失败', cancelled: '已取消', expired: '已过期',
 };
-const STATUS_TONE = {
-  draft: 'yellow', submitting: 'blue', queued: 'yellow', running: 'blue',
-  succeeded: 'green', failed: 'red', cancelled: 'gray', expired: 'gray',
-};
-const RATIOS = ['16:9', '9:16', '1:1', '4:3', '3:4', '21:9'];
-const RESOLUTIONS = ['768P', '2K'];
-const DURATIONS = [6, 8, 10];
+const DEFAULT_MODEL = 'minimax-h3';
+const LAST_MODEL_KEY = 'td-last-model';
+const QUICK_DURATIONS = [3, 4, 5, 6, 8, 10, 12, 15, 20, 25, 30];
 
 const ICONS = {
-  plus: '<svg viewBox="0 0 16 16"><path d="M8 3v10M3 8h10" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',
-  play: '<svg viewBox="0 0 16 16"><path d="M5 3.8v8.4L12.4 8z" fill="currentColor"/></svg>',
-  copy: '<svg viewBox="0 0 16 16"><rect x="5.5" y="5.5" width="8" height="9" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M10.5 5.5v-2a1.5 1.5 0 0 0-1.5-1.5H4A1.5 1.5 0 0 0 2.5 3.5V10A1.5 1.5 0 0 0 4 11.5h1.5" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>',
-  trash: '<svg viewBox="0 0 16 16"><path d="M2.5 4.5h11M6.5 4V3a1 1 0 0 1 1-1h1a1 1 0 0 1 1 1v1M4 4.5l.7 8.2a1.5 1.5 0 0 0 1.5 1.3h3.6a1.5 1.5 0 0 0 1.5-1.3L12 4.5M6.8 7.5v4M9.2 7.5v4" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>',
-  folder: '<svg viewBox="0 0 16 16"><path d="M2 4.5A1.5 1.5 0 0 1 3.5 3h2.6a1.5 1.5 0 0 1 1.1.5l1 1.2a1.5 1.5 0 0 0 1.1.5h3.2A1.5 1.5 0 0 1 14 6.7v5.8a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 12.5z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>',
-  image: '<svg viewBox="0 0 16 16"><rect x="2" y="3" width="12" height="10" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.3"/><circle cx="5.4" cy="6.2" r="1.1" fill="currentColor"/><path d="M2.5 11.5 6 8.4l2.4 2.1 2.2-2 2.9 3" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>',
-  refresh: '<svg viewBox="0 0 16 16"><path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9M13.5 2.5v2.6h-2.6" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>',
-  alert: '<svg viewBox="0 0 16 16"><path d="M8 1.8 15 13.5H1z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M8 6.2v3.4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><circle cx="8" cy="11.4" r="0.9" fill="currentColor"/></svg>',
-  film: '<svg viewBox="0 0 16 16"><rect x="2" y="3" width="12" height="10" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M5.5 3v10M10.5 3v10M2 6.3h3.5M2 9.7h3.5M10.5 6.3H14M10.5 9.7H14" stroke="currentColor" stroke-width="1.1"/></svg>',
-  external: '<svg viewBox="0 0 16 16"><path d="M6.5 3.5h-3v9h9v-3M9 3.5h3.5V7M13.2 3.8 7.5 9.5" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  plus: '<svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
+  play: '<svg viewBox="0 0 24 24"><path d="M8 5.5v13l11-6.5z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>',
+  copy: '<svg viewBox="0 0 24 24"><rect x="8.5" y="8.5" width="12" height="13" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M15.5 8.5v-3a2 2 0 0 0-2-2h-8a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>',
+  trash: '<svg viewBox="0 0 24 24"><path d="M4 7h16M10 6V4.8A1.2 1.2 0 0 1 11.2 3.6h1.6A1.2 1.2 0 0 1 14 4.8V6M6 7l1 12.2a2 2 0 0 0 2 1.8h6a2 2 0 0 0 2-1.8L18 7M10.3 11v6M13.7 11v6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  folder: '<svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4a2 2 0 0 1 1.5.7l1.3 1.6a2 2 0 0 0 1.5.7H19a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>',
+  image: '<svg viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="15" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="8.6" cy="9.6" r="1.5" fill="currentColor"/><path d="M4 17.5 9.5 12.5l3.2 3 3.2-2.8 4.1 4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>',
+  refresh: '<svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.34-5.66M20 4v4h-4" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  alert: '<svg viewBox="0 0 24 24"><path d="M12 3.5 21.5 20h-19z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M12 10v4.4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><circle cx="12" cy="17.2" r="1" fill="currentColor"/></svg>',
+  external: '<svg viewBox="0 0 24 24"><path d="M10 5H5v14h14v-5M13.5 5H19v5.5M18.6 5.4 11 13" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  video: '<svg viewBox="0 0 24 24"><rect x="3" y="5.5" width="13" height="13" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="m16 10.5 5-3v9l-5-3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>',
+  music: '<svg viewBox="0 0 24 24"><path d="M9 18.5V6l11-2.5V16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><circle cx="6.5" cy="18.5" r="2.5" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="17.5" cy="16" r="2.5" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>',
+  link: '<svg viewBox="0 0 24 24"><path d="M10 14a4.5 4.5 0 0 0 6.4.4l3-3a4.5 4.5 0 0 0-6.4-6.4l-1.6 1.6M14 10a4.5 4.5 0 0 0-6.4-.4l-3 3a4.5 4.5 0 0 0 6.4 6.4l1.6-1.6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>',
+  x: '<svg viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',
 };
 
 const state = {
   tasks: [],
+  models: [],
   selectedId: null,
   settings: null,
   detailSig: '',
@@ -91,6 +86,10 @@ function getTask(id) {
   return state.tasks.find((t) => t.id === id) || null;
 }
 
+function getModel(id) {
+  return state.models.find((m) => m.id === id) || state.models.find((m) => m.id === DEFAULT_MODEL) || null;
+}
+
 function editable(t) {
   return t && (t.status === 'draft' || t.status === 'failed');
 }
@@ -102,6 +101,14 @@ function mergeTask(updated) {
   if (i >= 0) state.tasks[i] = updated;
   else state.tasks.unshift(updated);
   renderSidebar();
+}
+
+function ratioLabel(r) {
+  return r === 'adaptive' ? '自适应' : r;
+}
+
+function durationLabel(d) {
+  return Number(d) === -1 ? '智能' : `${d}s`;
 }
 
 /* ---------------- 自动保存管道 ---------------- */
@@ -143,14 +150,14 @@ function scheduleSave(t, patch) {
 /* ---------------- 侧栏 ---------------- */
 
 function badge(t) {
-  const tone = STATUS_TONE[t.status] || 'gray';
   const pulse = t.status === 'running' || t.status === 'submitting' ? ' pulse' : '';
-  return `<span class="badge badge-${tone}${pulse}">${STATUS_LABEL[t.status] || t.status}</span>`;
+  return `<span class="badge badge-${t.status}${pulse}">${STATUS_LABEL[t.status] || t.status}</span>`;
 }
 
 function metaLine(t) {
-  const parts = [MODE_LABEL[t.mode] || t.mode, `${t.duration}s`, t.resolution];
-  if (t.mode === 'text') parts.push(t.ratio);
+  const parts = [durationLabel(t.duration), t.resolution];
+  if (t.ratio) parts.push(ratioLabel(t.ratio));
+  if (t.audio) parts.push('有声');
   return parts.join(' · ');
 }
 
@@ -167,8 +174,9 @@ function renderSidebar() {
     return;
   }
 
-  list.innerHTML = state.tasks.map((t, i) => {
+  list.innerHTML = state.tasks.map((t) => {
     const prompt = (t.prompt || '').trim();
+    const model = getModel(t.model);
     const actions = [];
     if (t.status === 'draft' || t.status === 'failed') {
       actions.push(`<button class="icon-btn" data-action="submit" title="开始生成">${ICONS.play}</button>`);
@@ -178,10 +186,16 @@ function renderSidebar() {
     const runningBar = (t.status === 'running' || t.status === 'queued' || t.status === 'submitting')
       ? '<div class="running-bar"><i></i></div>' : '';
     return `
-      <article class="task-card ${t.id === state.selectedId ? 'selected' : ''}" data-id="${t.id}" style="animation-delay:${Math.min(i, 6) * 40}ms">
-        <div class="card-top">${badge(t)}<span class="card-time">${fmtTime(t.createdAt)}</span></div>
+      <article class="task-card ${t.id === state.selectedId ? 'selected' : ''}" data-id="${t.id}">
+        <div class="card-top">
+          <span class="card-model">${escapeHtml(model ? model.name : t.model)}</span>
+          ${badge(t)}
+        </div>
         <p class="card-prompt ${prompt ? '' : 'empty'}">${prompt ? escapeHtml(prompt) : '（未填写提示词）'}</p>
-        <div class="card-meta">${escapeHtml(metaLine(t))}</div>
+        <div class="card-meta">
+          <span>${MODE_LABEL[t.mode] || t.mode} · ${escapeHtml(metaLine(t))}</span>
+          <span>${fmtTime(t.createdAt)}</span>
+        </div>
         ${runningBar}
         <div class="card-actions">${actions.join('')}</div>
       </article>`;
@@ -193,7 +207,7 @@ function renderSidebar() {
 function renderDetail(force = false) {
   const t = getTask(state.selectedId);
   const sig = t
-    ? [t.id, t.status, t.mode, t.error, t.downloadError, t.videoPath, t.videoUrl].join('|')
+    ? [t.id, t.status, t.mode, t.model, t.error, t.downloadError, t.videoPath, t.videoUrl, t.audio].join('|')
     : 'empty';
   if (!force && sig === state.detailSig) return;
   state.detailSig = sig;
@@ -216,12 +230,25 @@ function renderDetail(force = false) {
 }
 
 function emptyHtml() {
+  const modelCount = state.models.length || 17;
+  const famCount = new Set(state.models.map((m) => m.family)).size || 5;
   return `
     <div class="empty-state">
-      <div class="empty-mark">${ICONS.film}</div>
+      <div class="empty-mark">
+        <svg viewBox="0 0 48 48" fill="none" aria-hidden="true">
+          <rect x="4" y="4" width="40" height="40" rx="10" stroke="#27272A" stroke-width="1.5"/>
+          <path d="M17 15.5v17l14.5-8.5z" stroke="#52525B" stroke-width="1.6" stroke-linejoin="round"/>
+          <circle cx="17" cy="15.5" r="2.4" fill="#22C55E"/>
+          <circle cx="17" cy="32.5" r="1.7" fill="#3F3F46"/>
+          <circle cx="31.5" cy="24" r="1.7" fill="#3F3F46"/>
+          <path d="M36 18v12" stroke="#22C55E" stroke-width="1.6" stroke-linecap="round"/>
+          <path d="M39.5 20.4v7.2" stroke="#3F3F46" stroke-width="1.6" stroke-linecap="round"/>
+        </svg>
+      </div>
       <h2>从第一段视频开始</h2>
-      <p>新建片段，配置提示词、时长与画质，提交后即可在这里看到生成结果。每一段片段的配置相互独立，可以一次性排布多段。</p>
+      <p>新建片段，从词元跳动网关的 ${modelCount} 个视频模型中选择一个，配置提示词、素材与参数，提交后即可在这里跟踪生成进度与结果。</p>
       <button class="btn btn-primary" data-action="new">${ICONS.plus}新建片段</button>
+      <div class="empty-hint">TOKENDANCE.SPACE · ${modelCount} VIDEO MODELS · ${famCount} FAMILIES</div>
     </div>`;
 }
 
@@ -231,7 +258,7 @@ function readonlyHtml(t) {
       <div class="detail-head">
         <div>
           <h2 class="detail-title">${STATUS_LABEL[t.status] || t.status}</h2>
-          <div class="detail-sub">${escapeHtml(metaLine(t))} · 创建于 ${fmtTime(t.createdAt)}</div>
+          <div class="detail-sub">${escapeHtml(t.model)} · ${MODE_LABEL[t.mode] || t.mode} · ${escapeHtml(metaLine(t))} · 创建于 ${fmtTime(t.createdAt)}</div>
         </div>
         <div class="detail-actions">
           <button class="btn btn-primary" data-action="duplicate">${ICONS.copy}复制为新片段</button>
@@ -240,32 +267,34 @@ function readonlyHtml(t) {
       <div class="meta-grid">
         <div class="meta-row"><span class="meta-key">提示词</span><span class="meta-val">${escapeHtml(t.prompt || '（无）')}</span></div>
         <div class="meta-row"><span class="meta-key">远程任务</span><span class="meta-val mono">${escapeHtml(t.remoteId || '—')}</span></div>
+        ${t.error ? `<div class="meta-row"><span class="meta-key">错误信息</span><span class="meta-val" style="color:var(--danger)">${escapeHtml(t.error)}</span></div>` : ''}
       </div>
     </div>`;
 }
 
 function progressHtml(t) {
-  const title = t.status === 'submitting' ? '正在提交任务' : t.status === 'queued' ? '排队等待中' : '正在生成视频';
-  const sub = t.status === 'queued'
-    ? '任务已进入远端队列，通常 1 – 3 分钟内完成'
-    : '模型正在渲染画面，通常 1 – 3 分钟内完成';
+  const statusText = (t.status === 'submitting' ? 'SUBMITTING' : t.status === 'queued' ? 'QUEUED' : 'RUNNING');
+  const sub = t.status === 'submitting'
+    ? '正在向网关提交任务…'
+    : t.status === 'queued'
+      ? '任务已进入远端队列，等待模型调度'
+      : '模型正在渲染画面，时长越长耗时越久';
   return `
     <div class="detail-inner">
       <div class="detail-head">
         <div>
           <h2 class="detail-title">片段生成中</h2>
-          <div class="detail-sub">${escapeHtml(metaLine(t))}</div>
+          <div class="detail-sub">${escapeHtml(t.model)} · ${MODE_LABEL[t.mode] || t.mode} · ${escapeHtml(metaLine(t))}</div>
         </div>
         ${badge(t)}
       </div>
       <div class="progress-panel">
-        <div class="progress-ring"><i></i></div>
-        <h3>${title}</h3>
+        <div class="progress-status">${statusText}</div>
         <p class="progress-sub">${sub}</p>
         <div class="progress-elapsed" id="elapsed" data-since="${t.submittedAt || t.updatedAt}">${fmtElapsed(t.submittedAt || t.updatedAt)}</div>
         <div class="progress-track"><i></i></div>
       </div>
-      <div class="meta-grid" style="margin-top:16px">
+      <div class="meta-grid" style="margin-top:14px">
         <div class="meta-row"><span class="meta-key">提示词</span><span class="meta-val">${escapeHtml(t.prompt || '（无）')}</span></div>
         <div class="meta-row"><span class="meta-key">远程任务</span><span class="meta-val mono">${escapeHtml(t.remoteId || '提交中…')}</span></div>
       </div>
@@ -287,7 +316,7 @@ function playerHtml(t) {
       <div class="detail-head">
         <div>
           <h2 class="detail-title">生成完成</h2>
-          <div class="detail-sub">${escapeHtml(metaLine(t))} · ${fmtTime(t.updatedAt)} 完成</div>
+          <div class="detail-sub">${escapeHtml(t.model)} · ${MODE_LABEL[t.mode] || t.mode} · ${escapeHtml(metaLine(t))} · ${fmtTime(t.updatedAt)} 完成</div>
         </div>
         ${badge(t)}
       </div>
@@ -297,7 +326,7 @@ function playerHtml(t) {
         <div class="meta-row"><span class="meta-key">远程任务</span><span class="meta-val mono">${escapeHtml(t.remoteId)}</span></div>
         <div class="meta-row"><span class="meta-key">本地文件</span><span class="meta-val mono">${t.videoPath ? escapeHtml(t.videoPath) : '—'}</span></div>
         ${urlRow}
-        <div class="meta-row"><span class="meta-key">说明</span><span class="meta-val" style="color:var(--muted);font-size:12px">远程地址 24 小时后失效，视频已保存到本地，可随时回看</span></div>
+        <div class="meta-row"><span class="meta-key">说明</span><span class="meta-val" style="color:var(--faint);font-size:11.5px">远程地址 24 小时后失效，视频已保存到本地，可随时回看</span></div>
       </div>
       <div class="detail-actions" style="margin-top:4px">
         ${t.videoPath ? `<button class="btn btn-ghost" data-action="reveal">${ICONS.folder}在 Finder 中显示</button>` : ''}
@@ -310,87 +339,101 @@ function playerHtml(t) {
 
 /* ---------------- 编辑器 ---------------- */
 
-function editorHtml(t) {
-  const failedBanner = t.status === 'failed' && t.error
-    ? `<div class="form-error">${ICONS.alert}<div><strong>上次提交失败</strong><br>${escapeHtml(t.error)}</div></div>` : '';
+function modelPickerHtml(t) {
+  const families = [];
+  for (const m of state.models) {
+    let fam = families.find((f) => f.key === m.family);
+    if (!fam) {
+      fam = { key: m.family, name: m.familyName || m.family, items: [] };
+      families.push(fam);
+    }
+    fam.items.push(m);
+  }
+  return families.map((fam) => `
+    <div class="model-family">
+      <div class="model-family-name">${escapeHtml(fam.name)} · ${fam.items.length}</div>
+      <div class="model-grid">
+        ${fam.items.map((m) => `
+          <button type="button" class="model-card ${t.model === m.id ? 'active' : ''}" data-model="${m.id}">
+            <span class="model-card-head">
+              <span class="model-card-name">${escapeHtml(m.name)}</span>
+              ${m.badge ? `<span class="model-badge">${escapeHtml(m.badge)}</span>` : ''}
+            </span>
+            <span class="model-card-id">${escapeHtml(m.id)}</span>
+            <span class="model-card-pricing">${escapeHtml(m.pricing || '')}</span>
+            <span class="model-card-desc">${escapeHtml(m.desc || '')}</span>
+          </button>`).join('')}
+      </div>
+    </div>`).join('');
+}
 
-  const modeCards = Object.keys(MODE_LABEL).map((m) => `
-    <button type="button" class="mode-card ${t.mode === m ? 'active' : ''}" data-mode="${m}">
-      <span class="mode-name">${MODE_LABEL[m]}</span>
-      <span class="mode-desc">${MODE_DESC[m]}</span>
-    </button>`).join('');
+function modeSegmentedHtml(t, model) {
+  if (!model || model.modes.length <= 1) return '';
+  return `
+    <section class="editor-section">
+      <span class="section-label">生成方式</span>
+      <div class="segmented">
+        ${model.modes.map((m) => `
+          <button type="button" class="seg-btn ${t.mode === m ? 'active' : ''}" data-mode="${m}">${MODE_LABEL[m] || m}</button>`).join('')}
+      </div>
+    </section>`;
+}
 
-  const ratioBlock = t.mode === 'text' ? `
-    <div class="field-col">
-      <span class="section-label">画面比例</span>
-      <div class="chips" data-field="ratio">
-        ${RATIOS.map((r) => `<button type="button" class="chip ${t.ratio === r ? 'active' : ''}" data-value="${r}">${r}</button>`).join('')}
+function durationChipsHtml(t, model) {
+  const [min, max] = model.duration;
+  const chips = [];
+  if (model.durationAuto) {
+    chips.push(`<button type="button" class="chip ${Number(t.duration) === -1 ? 'active' : ''}" data-value="-1">智能</button>`);
+  }
+  const quick = QUICK_DURATIONS.filter((d) => d >= min && d <= max).slice(0, 5);
+  for (const d of quick) {
+    chips.push(`<button type="button" class="chip ${Number(t.duration) === d ? 'active' : ''}" data-value="${d}">${d}s</button>`);
+  }
+  return chips.join('');
+}
+
+function paramsHtml(t, model) {
+  const [min, max] = model.duration;
+  const durationVal = Number(t.duration) === -1 ? '' : t.duration;
+  const audioBlock = model.audio ? `
+    <div class="field-col" style="flex:0 0 auto;min-width:120px">
+      <span class="section-label">有声视频</span>
+      <div class="toggle-row">
+        <button type="button" class="toggle" role="switch" aria-checked="${t.audio ? 'true' : 'false'}" data-field="audio" aria-label="有声视频开关"></button>
+        <span class="toggle-label">${t.audio ? '开启' : '关闭'}</span>
       </div>
     </div>` : '';
-
-  const mediaBlock = t.mode === 'image' ? `
-    <section class="editor-section">
-      <span class="section-label">帧图片</span>
-      ${mediaSlotHtml(t, 'firstFrame', '首帧图片', 'image', true)}
-      ${mediaSlotHtml(t, 'lastFrame', '尾帧图片（可选）', 'image', false)}
-      <span class="hint">支持选择本地图片，或直接粘贴可公开访问的图片 URL；宽高比由图片决定</span>
-    </section>` : t.mode === 'reference' ? `
-    <section class="editor-section">
-      <span class="section-label">参考素材</span>
-      ${mediaSlotHtml(t, 'refImage', '参考图片', 'image', false)}
-      ${mediaSlotHtml(t, 'refVideo', '参考视频（仅 URL）', 'video', false, true)}
-      ${mediaSlotHtml(t, 'refAudio', '参考音频（仅 URL）', 'audio', false, true)}
-      <span class="hint">参考图片与参考视频至少提供一项，可自由组合</span>
-    </section>` : '';
-
-  const durationChips = DURATIONS.map((d) =>
-    `<button type="button" class="chip ${Number(t.duration) === d ? 'active' : ''}" data-value="${d}">${d}s</button>`).join('');
-
+  const adaptiveHint = (t.mode === 'image' || t.mode === 'edit') && t.ratio === 'adaptive'
+    ? '<span class="hint accent">比例自适应：输出宽高比将跟随输入素材</span>' : '';
+  const autoHint = model.durationAuto && Number(t.duration) === -1
+    ? '<span class="hint">智能时长：由模型根据内容自动决定</span>' : '';
   return `
-    <div class="detail-inner">
-      <div class="detail-head">
-        <div>
-          <h2 class="detail-title">${t.status === 'failed' ? '修改后重新提交' : '新建片段'}</h2>
-          <div class="detail-sub">每段片段独立配置 · 创建于 ${fmtTime(t.createdAt)}</div>
-        </div>
-        ${badge(t)}
-      </div>
-      ${failedBanner}
-      <section class="editor-section">
-        <span class="section-label">生成方式</span>
-        <div class="mode-cards">${modeCards}</div>
-      </section>
-      <section class="editor-section">
-        <span class="section-label">提示词</span>
-        <textarea class="prompt-input" id="f-prompt" placeholder="描述想要的画面、动作与镜头语言，例如：女人坐在咖啡馆里抬头看向窗外，镜头推进拍到街道，暖色调">${escapeHtml(t.prompt)}</textarea>
-      </section>
-      ${mediaBlock}
-      <section class="editor-section">
-        <div class="field-row">
-          <div class="field-col">
-            <span class="section-label">时长（秒）</span>
-            <div class="chips" data-field="duration">
-              ${durationChips}
-              <input type="number" id="f-duration" min="1" max="15" value="${t.duration}" style="width:76px" />
-            </div>
+    <section class="editor-section">
+      <div class="field-row">
+        <div class="field-col">
+          <span class="section-label">时长（秒）<span class="section-note">${min}–${max}s</span></span>
+          <div class="chips" data-field="duration">
+            ${durationChipsHtml(t, model)}
+            <input type="number" id="f-duration" min="${min}" max="${max}" value="${durationVal}" placeholder="${model.durationAuto ? '智能' : ''}" style="width:76px" />
           </div>
-          <div class="field-col">
-            <span class="section-label">画质</span>
-            <div class="chips" data-field="resolution">
-              ${RESOLUTIONS.map((r) => `<button type="button" class="chip ${t.resolution === r ? 'active' : ''}" data-value="${r}">${r}</button>`).join('')}
-            </div>
+          ${autoHint}
+        </div>
+        <div class="field-col">
+          <span class="section-label">分辨率</span>
+          <div class="chips" data-field="resolution">
+            ${model.resolutions.map((r) => `<button type="button" class="chip ${t.resolution === r ? 'active' : ''}" data-value="${escapeHtml(r)}">${escapeHtml(r)}</button>`).join('')}
           </div>
-          ${ratioBlock}
         </div>
-      </section>
-      <div class="editor-foot">
-        <span class="save-state" id="save-state">更改会自动保存</span>
-        <div class="foot-actions">
-          <button class="btn btn-ghost btn-danger" data-action="remove">${ICONS.trash}删除</button>
-          <button class="btn btn-primary" data-action="submit">${ICONS.play}开始生成</button>
+        <div class="field-col">
+          <span class="section-label">画面比例</span>
+          <div class="chips" data-field="ratio">
+            ${model.ratios.map((r) => `<button type="button" class="chip ${t.ratio === r ? 'active' : ''}" data-value="${escapeHtml(r)}">${ratioLabel(r)}</button>`).join('')}
+          </div>
+          ${adaptiveHint}
         </div>
+        ${audioBlock}
       </div>
-    </div>`;
+    </section>`;
 }
 
 function mediaSlotHtml(t, key, label, kind, required, urlOnly = false) {
@@ -412,16 +455,126 @@ function mediaSlotHtml(t, key, label, kind, required, urlOnly = false) {
         <button class="icon-btn" data-media-clear="${key}" title="移除">${ICONS.trash}</button>
       </div>`;
   } else {
+    const kindLabel = kind === 'image' ? '图片' : kind === 'video' ? '视频' : '音频';
+    const icon = kind === 'image' ? ICONS.image : kind === 'video' ? ICONS.video : ICONS.music;
     body = `
       <div class="media-empty">
-        ${urlOnly ? '' : `<button type="button" class="btn btn-ghost btn-sm" data-media-pick="${key}" data-kind="${kind}">${ICONS.image}选择本地文件</button><span class="media-or">或</span>`}
-        <input type="url" class="url-input" data-media-url="${key}" placeholder="粘贴${kind === 'image' ? '图片' : kind === 'video' ? '视频' : '音频'} URL，回车确认" spellcheck="false" />
+        ${urlOnly ? '' : `<button type="button" class="btn btn-ghost btn-sm" data-media-pick="${key}" data-kind="${kind}">${icon}选择本地文件</button><span class="media-or">或</span>`}
+        <input type="url" class="url-input" data-media-url="${key}" placeholder="粘贴${kindLabel} URL，回车确认" spellcheck="false" />
       </div>`;
   }
   return `
     <div class="media-slot">
       <div class="media-slot-head"><span class="media-slot-title">${label}${req}</span></div>
       ${body}
+    </div>`;
+}
+
+function refImagesHtml(t, model) {
+  const refs = (t.media && t.media.refImages) || [];
+  const max = model.maxRefImages || Infinity;
+  const items = refs.map((m, i) => {
+    const inner = m.source === 'local'
+      ? `<img src="${toFileUrl(m.path)}" alt="" />`
+      : `<span class="ref-url-tag">${escapeHtml(m.url)}</span>`;
+    return `
+      <div class="ref-item" title="${escapeHtml(m.source === 'local' ? m.path : m.url)}">
+        ${inner}
+        <button type="button" class="ref-remove" data-ref-remove="${i}" title="移除">${ICONS.x}</button>
+      </div>`;
+  }).join('');
+  const canAdd = refs.length < max;
+  const addRow = canAdd ? `
+    <div class="media-empty">
+      <button type="button" class="btn btn-ghost btn-sm" data-ref-add="local">${ICONS.image}添加本地图片</button>
+      <span class="media-or">或</span>
+      <input type="url" class="url-input" data-ref-add="url" placeholder="粘贴图片 URL，回车添加" spellcheck="false" />
+    </div>` : '';
+  const limitHint = max !== Infinity
+    ? `<span class="hint">最多 ${max} 张参考图（当前 ${refs.length} 张）</span>` : '';
+  return `
+    <div class="media-slot">
+      <div class="media-slot-head"><span class="media-slot-title">参考图片</span></div>
+      ${refs.length ? `<div class="ref-grid">${items}</div>` : ''}
+      ${addRow}
+      ${limitHint}
+    </div>`;
+}
+
+function mediaSectionHtml(t, model) {
+  if (t.mode === 'image') {
+    return `
+      <section class="editor-section">
+        <span class="section-label">帧图片</span>
+        ${mediaSlotHtml(t, 'firstFrame', '首帧图片', 'image', true)}
+        ${mediaSlotHtml(t, 'lastFrame', '尾帧图片（可选）', 'image', false)}
+        <span class="hint">支持选择本地图片，或直接粘贴可公开访问的图片 URL；宽高比可在下方固定或设为自适应</span>
+      </section>`;
+  }
+  if (t.mode === 'reference') {
+    const extra = model.refImagesOnly ? '' : `
+      ${mediaSlotHtml(t, 'refVideo', '参考视频（仅 URL）', 'video', false, true)}
+      ${mediaSlotHtml(t, 'refAudio', '参考音频（仅 URL）', 'audio', false, true)}`;
+    return `
+      <section class="editor-section">
+        <span class="section-label">参考素材</span>
+        ${refImagesHtml(t, model)}
+        ${extra}
+        <span class="hint">${model.refImagesOnly ? '至少添加一张参考图片' : '参考图片与参考视频至少提供一项，可自由组合'}</span>
+      </section>`;
+  }
+  if (t.mode === 'edit') {
+    return `
+      <section class="editor-section">
+        <span class="section-label">编辑素材</span>
+        ${mediaSlotHtml(t, 'editVideo', '源视频（仅 URL）', 'video', true, true)}
+        ${refImagesHtml(t, model)}
+        <span class="hint">源视频为待编辑的原始片段；参考图可选，用于风格 / 主体替换</span>
+      </section>`;
+  }
+  return '';
+}
+
+function editorHtml(t) {
+  const model = getModel(t.model);
+  if (!model) return '<div class="detail-inner">模型目录加载失败</div>';
+
+  const failedBanner = t.status === 'failed' && t.error
+    ? `<div class="form-error">${ICONS.alert}<div><strong>上次提交失败</strong><br>${escapeHtml(t.error)}</div></div>` : '';
+
+  const promptLabel = t.mode === 'edit' ? '编辑指令' : '提示词';
+  const promptPlaceholder = t.mode === 'edit'
+    ? '描述希望对源视频做的修改，例如：把画面转为水彩风格，保留人物动作'
+    : '描述想要的画面、动作与镜头语言，例如：女人坐在咖啡馆里抬头看向窗外，镜头推进拍到街道，暖色调';
+
+  return `
+    <div class="detail-inner">
+      <div class="detail-head">
+        <div>
+          <h2 class="detail-title">${t.status === 'failed' ? '修改后重新提交' : '新建片段'}</h2>
+          <div class="detail-sub">${escapeHtml(t.model)} · 创建于 ${fmtTime(t.createdAt)}</div>
+        </div>
+        ${badge(t)}
+      </div>
+      ${failedBanner}
+      <section class="editor-section">
+        <span class="section-label">模型<span class="section-note">${state.models.length} MODELS · TOKENDANCE GATEWAY</span></span>
+        ${modelPickerHtml(t)}
+      </section>
+      ${modeSegmentedHtml(t, model)}
+      <section class="editor-section">
+        <span class="section-label">${promptLabel}</span>
+        <textarea class="prompt-input" id="f-prompt" placeholder="${promptPlaceholder}">${escapeHtml(t.prompt)}</textarea>
+      </section>
+      ${mediaSectionHtml(t, model)}
+      ${paramsHtml(t, model)}
+      <div class="editor-foot">
+        <span class="save-state" id="save-state">更改会自动保存</span>
+        <div class="foot-actions">
+          <button class="btn btn-ghost btn-danger" data-action="remove">${ICONS.trash}删除</button>
+          <button class="btn btn-primary" data-action="submit">${ICONS.play}开始生成</button>
+        </div>
+      </div>
     </div>`;
 }
 
@@ -439,21 +592,54 @@ async function patchMedia(t, key, value) {
   }
 }
 
+async function patchRefImages(t, updater) {
+  const media = { ...(t.media || {}) };
+  const refs = [...(media.refImages || [])];
+  const next = updater(refs);
+  if (next.length) media.refImages = next;
+  else delete media.refImages;
+  try {
+    await flushSave(t);
+    const updated = await studio.updateTask(t.id, { media });
+    mergeTask(updated);
+    renderDetail(true);
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
 function validateForSubmit(t) {
-  if (t.mode === 'text' && !(t.prompt || '').trim()) return '文生视频需要填写提示词';
-  if (t.mode === 'image' && !(t.media && t.media.firstFrame)) return '图生视频需要至少一张首帧图片';
+  const m = t.media || {};
+  const prompt = (t.prompt || '').trim();
+  if (t.mode === 'text' && !prompt) return '文生视频需要填写提示词';
+  if (t.mode === 'image' && !m.firstFrame) return '图生视频需要至少一张首帧图片';
   if (t.mode === 'reference') {
-    const m = t.media || {};
-    if (!m.refImage && !m.refVideo) return '参考生视频至少需要参考图片或参考视频';
+    if (!(m.refImages && m.refImages.length) && !m.refVideo) return '参考生视频至少需要参考图片或参考视频';
+  }
+  if (t.mode === 'edit') {
+    if (!m.editVideo) return '视频编辑需要一段源视频（URL）';
+    if (!prompt) return '视频编辑需要填写编辑指令';
   }
   return '';
 }
 
 /* ---------------- 任务操作 ---------------- */
 
+function rememberModel(id) {
+  try { localStorage.setItem(LAST_MODEL_KEY, id); } catch { /* 忽略 */ }
+}
+
+function lastModel() {
+  try {
+    const id = localStorage.getItem(LAST_MODEL_KEY);
+    if (id && getModel(id)) return id;
+  } catch { /* 忽略 */ }
+  return DEFAULT_MODEL;
+}
+
 async function newTask() {
   try {
-    const task = await studio.createTask({ mode: 'text' });
+    const task = await studio.createTask({ model: lastModel() });
     mergeTask(task);
     state.selectedId = task.id;
     renderSidebar();
@@ -602,6 +788,18 @@ function bindDetailEvents() {
   box.addEventListener('click', async (e) => {
     const t = getTask(state.selectedId);
 
+    const modelBtn = e.target.closest('[data-model]');
+    if (modelBtn && t && editable(t) && modelBtn.dataset.model !== t.model) {
+      try {
+        await flushSave(t);
+        const updated = await studio.updateTask(t.id, { model: modelBtn.dataset.model });
+        mergeTask(updated);
+        rememberModel(updated.model);
+        renderDetail(true);
+      } catch (err) { showToast(err.message, 'error'); }
+      return;
+    }
+
     const modeBtn = e.target.closest('[data-mode]');
     if (modeBtn && t && editable(t)) {
       try {
@@ -620,8 +818,19 @@ function bindDetailEvents() {
       chip.parentElement.querySelectorAll('.chip').forEach((c) => c.classList.remove('active'));
       chip.classList.add('active');
       const num = $('#f-duration');
-      if (field === 'duration' && num) num.value = chip.dataset.value;
+      if (field === 'duration' && num) num.value = Number(chip.dataset.value) === -1 ? '' : chip.dataset.value;
       scheduleSave(t, { [field]: value });
+      await flushSave(t);
+      return;
+    }
+
+    const toggle = e.target.closest('.toggle[data-field="audio"]');
+    if (toggle && t && editable(t)) {
+      const next = toggle.getAttribute('aria-checked') !== 'true';
+      toggle.setAttribute('aria-checked', next ? 'true' : 'false');
+      const label = toggle.parentElement.querySelector('.toggle-label');
+      if (label) label.textContent = next ? '开启' : '关闭';
+      scheduleSave(t, { audio: next });
       await flushSave(t);
       return;
     }
@@ -640,6 +849,22 @@ function bindDetailEvents() {
       return;
     }
 
+    const refAddBtn = e.target.closest('[data-ref-add="local"]');
+    if (refAddBtn && t && editable(t)) {
+      const file = await studio.pickMedia('image');
+      if (file) {
+        await patchRefImages(t, (refs) => [...refs, { source: 'local', path: file.path, name: file.name }]);
+      }
+      return;
+    }
+
+    const refRemove = e.target.closest('[data-ref-remove]');
+    if (refRemove && t && editable(t)) {
+      const idx = Number(refRemove.dataset.refRemove);
+      await patchRefImages(t, (refs) => refs.filter((_, i) => i !== idx));
+      return;
+    }
+
     const actionBtn = e.target.closest('[data-action]');
     if (actionBtn) await handleDetailAction(t, actionBtn.dataset.action, actionBtn);
   });
@@ -648,7 +873,14 @@ function bindDetailEvents() {
     const t = getTask(state.selectedId);
     if (!t || !editable(t)) return;
     if (e.target.id === 'f-prompt') scheduleSave(t, { prompt: e.target.value });
-    else if (e.target.id === 'f-duration') scheduleSave(t, { duration: e.target.value });
+    else if (e.target.id === 'f-duration') {
+      if (e.target.value === '') {
+        const m = getModel(t.model);
+        if (m && m.durationAuto) scheduleSave(t, { duration: -1 });
+      } else {
+        scheduleSave(t, { duration: e.target.value });
+      }
+    }
   });
 
   box.addEventListener('change', (e) => {
@@ -660,11 +892,21 @@ function bindDetailEvents() {
       if (url) patchMedia(t, urlInput.dataset.mediaUrl, { source: 'url', url });
       return;
     }
+    const refUrl = e.target.closest('[data-ref-add="url"]');
+    if (refUrl) {
+      const url = refUrl.value.trim();
+      if (url) patchRefImages(t, (refs) => [...refs, { source: 'url', url }]);
+      return;
+    }
     if (e.target.id === 'f-duration') {
-      const val = Number(e.target.value);
-      document.querySelectorAll('[data-field="duration"] .chip').forEach((c) => {
-        c.classList.toggle('active', Number(c.dataset.value) === val);
-      });
+      const m = getModel(t.model);
+      const allowAuto = m && m.durationAuto;
+      const val = e.target.value === '' ? (allowAuto ? -1 : NaN) : Number(e.target.value);
+      if (!Number.isNaN(val)) {
+        document.querySelectorAll('[data-field="duration"] .chip').forEach((c) => {
+          c.classList.toggle('active', Number(c.dataset.value) === val);
+        });
+      }
     }
   });
 }
@@ -770,7 +1012,11 @@ async function boot() {
   bindSettings();
   bindDetailEvents();
   try {
-    [state.tasks, state.settings] = await Promise.all([studio.listTasks(), studio.getSettings()]);
+    [state.tasks, state.settings, state.models] = await Promise.all([
+      studio.listTasks(),
+      studio.getSettings(),
+      studio.listModels(),
+    ]);
   } catch (err) {
     showToast(err.message, 'error');
   }
@@ -780,7 +1026,7 @@ async function boot() {
   renderSidebar();
   renderDetail(true);
 
-  // 首次启动（未配置 API Key）时引导完成全局设置
+  // 首次启动（未配置 API Key）时引导完成网关设置
   if (state.settings && !state.settings.apiKey) {
     await openSettings();
     showToast('首次使用请先在设置中填入 API Key', 'error');

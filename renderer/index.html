@@ -3,33 +3,37 @@
 <head>
   <meta charset="UTF-8" />
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' file: data:; media-src 'self' file:; style-src 'self' 'unsafe-inline'" />
-  <title>AI 视频工坊</title>
+  <title>TokenDance 视频接入助手</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
   <header class="topbar">
     <div class="brand">
       <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
-        <rect x="2" y="6" width="20" height="20" rx="4" fill="none" stroke="#2F3437" stroke-width="2"/>
-        <path d="M11 12.5v7l6-3.5z" fill="#2F3437"/>
-        <rect x="19" y="2" width="9" height="9" rx="2" fill="#C2643A"/>
+        <rect x="1.5" y="1.5" width="29" height="29" rx="7" fill="none" stroke="#27272A" stroke-width="1.5"/>
+        <path d="M11 10.5v11l9.5-5.5z" fill="none" stroke="#FAFAFA" stroke-width="1.6" stroke-linejoin="round"/>
+        <circle cx="11" cy="10.5" r="2.1" fill="#22C55E"/>
+        <circle cx="11" cy="21.5" r="1.4" fill="#3F3F46"/>
+        <circle cx="20.5" cy="16" r="1.4" fill="#3F3F46"/>
+        <path d="M24 12v8" stroke="#22C55E" stroke-width="1.6" stroke-linecap="round"/>
+        <path d="M26.8 13.6v4.8" stroke="#52525B" stroke-width="1.6" stroke-linecap="round"/>
       </svg>
       <div class="brand-text">
-        <h1>AI 视频工坊</h1>
-        <span class="brand-sub">MINIMAX H3 · 本地创作台</span>
+        <h1>TokenDance 视频接入助手</h1>
+        <span class="brand-sub">TOKENDANCE.SPACE GATEWAY · VIDEO MODELS</span>
       </div>
     </div>
     <div class="topbar-actions">
       <button id="btn-submit-all" class="btn btn-ghost hidden">
-        <svg viewBox="0 0 16 16"><path d="M3 8h9M8.5 4.5 12 8l-3.5 3.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <svg viewBox="0 0 24 24"><path d="M4.5 12h13M13 6.5l5.5 5.5-5.5 5.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
         提交全部草稿<span id="draft-count" class="draft-count"></span>
       </button>
       <button id="btn-settings" class="btn btn-ghost">
-        <svg viewBox="0 0 16 16"><path d="M8 5.4a2.6 2.6 0 1 0 0 5.2 2.6 2.6 0 0 0 0-5.2Z" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M13.3 8c0-.3 0-.6-.1-.9l1.2-.9-1.2-2-1.4.6a5.4 5.4 0 0 0-1.5-.9L10 2.5H6l-.3 1.4a5.4 5.4 0 0 0-1.5.9l-1.4-.6-1.2 2 1.2.9a5.6 5.6 0 0 0 0 1.8l-1.2.9 1.2 2 1.4-.6c.5.4 1 .7 1.5.9L6 13.5h4l.3-1.4a5.4 5.4 0 0 0 1.5-.9l1.4.6 1.2-2-1.2-.9c.1-.3.1-.6.1-.9Z" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg>
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M19.4 12c0-.5-.07-1-.2-1.45l1.8-1.4-1.7-2.9-2.1.85a7.4 7.4 0 0 0-2.5-1.45L14.3 3h-4.6l-.4 2.65a7.4 7.4 0 0 0-2.5 1.45l-2.1-.85-1.7 2.9 1.8 1.4a7.6 7.6 0 0 0 0 2.9l-1.8 1.4 1.7 2.9 2.1-.85a7.4 7.4 0 0 0 2.5 1.45l.4 2.65h4.6l.4-2.65a7.4 7.4 0 0 0 2.5-1.45l2.1.85 1.7-2.9-1.8-1.4c.13-.45.2-.95.2-1.45Z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>
         设置
       </button>
       <button id="btn-new" class="btn btn-primary">
-        <svg viewBox="0 0 16 16"><path d="M8 3v10M3 8h10" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
         新建片段
       </button>
     </div>
@@ -38,7 +42,7 @@
   <div class="layout">
     <aside class="sidebar">
       <div class="sidebar-head">
-        <span class="sidebar-title">创作队列</span>
+        <span class="sidebar-title">任务队列</span>
         <span id="queue-count" class="queue-count">0</span>
       </div>
       <div id="task-list" class="task-list"></div>
@@ -49,23 +53,24 @@
   <div id="settings-modal" class="modal-mask hidden">
     <div class="modal">
       <header class="modal-head">
-        <h2>全局设置</h2>
+        <h2>网关设置</h2>
         <button id="btn-settings-close" class="icon-btn" aria-label="关闭">
-          <svg viewBox="0 0 16 16"><path d="m4 4 8 8M12 4l-8 8" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+          <svg viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
         </button>
       </header>
       <div class="modal-body">
         <div class="field">
           <span class="field-label">接入点</span>
-          <input id="set-endpoint" type="text" spellcheck="false" autocomplete="off" />
-          <span class="field-hint">MiniMax V2 网关地址，提交与查询均走该地址</span>
+          <input id="set-endpoint" type="text" spellcheck="false" autocomplete="off" placeholder="https://tokendance.space" />
+          <span class="field-hint">词元跳动网关地址，全部视频协议共用</span>
         </div>
         <div class="field">
           <span class="field-label">API Key</span>
           <div class="key-row">
-            <input id="set-apikey" type="password" spellcheck="false" autocomplete="off" />
+            <input id="set-apikey" type="password" spellcheck="false" autocomplete="off" placeholder="sk-…" />
             <button id="set-toggle-key" class="btn btn-ghost btn-sm">显示</button>
           </div>
+          <span class="field-hint">在 tokendance.space 控制台获取，仅保存在本机</span>
         </div>
         <div class="settings-test">
           <button id="btn-test-conn" class="btn btn-ghost btn-sm">测试连接</button>

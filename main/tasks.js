@@ -4,12 +4,11 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { EventEmitter } = require('events');
-const api = require('./api');
+const { adapterFor } = require('./protocols');
+const { getModel, DEFAULT_MODEL } = require('./models');
 
 const POLL_MS = 4000;
 const TICK_MS = 1500;
-const RATIOS = ['16:9', '9:16', '1:1', '4:3', '3:4', '21:9'];
-const RESOLUTIONS = ['768P', '2K'];
 const IMAGE_MIME = {
   '.png': 'image/png',
   '.jpg': 'image/jpeg',
@@ -28,15 +27,38 @@ function clampInt(value, min, max, fallback) {
   return Math.min(max, Math.max(min, n));
 }
 
+function sanitizeOne(m) {
+  if (!m) return null;
+  if (m.source === 'url' && m.url) return { source: 'url', url: String(m.url).trim() };
+  if (m.source === 'local' && m.path) return { source: 'local', path: String(m.path), name: String(m.name || path.basename(m.path)) };
+  return null;
+}
+
 function sanitizeMedia(media) {
   const clean = {};
-  for (const key of ['firstFrame', 'lastFrame', 'refImage', 'refVideo', 'refAudio']) {
-    const m = media && media[key];
-    if (!m) continue;
-    if (m.source === 'url' && m.url) clean[key] = { source: 'url', url: String(m.url).trim() };
-    else if (m.source === 'local' && m.path) clean[key] = { source: 'local', path: String(m.path), name: String(m.name || path.basename(m.path)) };
+  for (const key of ['firstFrame', 'lastFrame', 'refVideo', 'refAudio', 'editVideo']) {
+    const m = sanitizeOne(media && media[key]);
+    if (m) clean[key] = m;
   }
+  const refs = (media && Array.isArray(media.refImages) ? media.refImages : [])
+    .map(sanitizeOne)
+    .filter(Boolean);
+  if (refs.length) clean.refImages = refs;
   return clean;
+}
+
+function migrateTask(t) {
+  if (!t.model) t.model = DEFAULT_MODEL;
+  if (t.media && t.media.refImage && !t.media.refImages) {
+    t.media.refImages = [t.media.refImage];
+    delete t.media.refImage;
+  }
+  if (t.audio === undefined) t.audio = false;
+  return t;
+}
+
+function defaultResolution(model) {
+  return model.resolutions.find((r) => /720|768/.test(r)) || model.resolutions[0];
 }
 
 // 任务管理器：草稿创建、提交、轮询、视频下载、持久化
@@ -56,7 +78,7 @@ class TaskManager extends EventEmitter {
   _load() {
     try {
       const raw = JSON.parse(fs.readFileSync(this.storeFile, 'utf8'));
-      this.tasks = Array.isArray(raw.tasks) ? raw.tasks : [];
+      this.tasks = Array.isArray(raw.tasks) ? raw.tasks.map(migrateTask) : [];
     } catch {
       this.tasks = [];
     }
@@ -111,14 +133,17 @@ class TaskManager extends EventEmitter {
   }
 
   create(config) {
+    const model = getModel(config.model);
     const task = {
       id: crypto.randomUUID(),
       remoteId: '',
-      mode: ['text', 'image', 'reference'].includes(config.mode) ? config.mode : 'text',
+      model: model.id,
+      mode: model.modes.includes(config.mode) ? config.mode : model.modes[0],
       prompt: String(config.prompt || ''),
-      duration: clampInt(config.duration, 1, 15, 6),
-      resolution: RESOLUTIONS.includes(config.resolution) ? config.resolution : '768P',
-      ratio: RATIOS.includes(config.ratio) ? config.ratio : '16:9',
+      duration: clampInt(config.duration, model.duration[0], model.duration[1], Math.min(6, model.duration[1])),
+      resolution: model.resolutions.includes(config.resolution) ? config.resolution : defaultResolution(model),
+      ratio: model.ratios.includes(config.ratio) ? config.ratio : (model.ratios.includes('adaptive') ? 'adaptive' : '16:9'),
+      audio: model.audio ? !!config.audio : false,
       media: sanitizeMedia(config.media),
       status: 'draft',
       error: '',
@@ -138,11 +163,24 @@ class TaskManager extends EventEmitter {
     const task = this._find(id);
     if (!task) throw new Error('片段不存在');
     if (task.status !== 'draft' && task.status !== 'failed') throw new Error('已提交的片段不能再修改，可复制为新片段');
-    if (patch.mode && ['text', 'image', 'reference'].includes(patch.mode)) task.mode = patch.mode;
+    if (patch.model && patch.model !== task.model) {
+      const model = getModel(patch.model);
+      task.model = model.id;
+      // 切换模型后把各项配置收敛到新模型支持的范围
+      if (!model.modes.includes(task.mode)) task.mode = model.modes[0];
+      task.duration = clampInt(task.duration, model.duration[0], model.duration[1], model.duration[0]);
+      if (!model.resolutions.includes(task.resolution)) task.resolution = defaultResolution(model);
+      if (!model.ratios.includes(task.ratio)) task.ratio = model.ratios.includes('adaptive') ? 'adaptive' : model.ratios[0];
+      if (!model.audio) task.audio = false;
+      task.media = sanitizeMedia(task.media);
+    }
+    const model = getModel(task.model);
+    if (patch.mode && model.modes.includes(patch.mode)) task.mode = patch.mode;
     if (patch.prompt !== undefined) task.prompt = String(patch.prompt);
-    if (patch.duration !== undefined) task.duration = clampInt(patch.duration, 1, 15, task.duration);
-    if (patch.resolution && RESOLUTIONS.includes(patch.resolution)) task.resolution = patch.resolution;
-    if (patch.ratio && RATIOS.includes(patch.ratio)) task.ratio = patch.ratio;
+    if (patch.duration !== undefined) task.duration = clampInt(patch.duration, model.duration[0], model.duration[1], task.duration);
+    if (patch.resolution && model.resolutions.includes(patch.resolution)) task.resolution = patch.resolution;
+    if (patch.ratio && model.ratios.includes(patch.ratio)) task.ratio = patch.ratio;
+    if (patch.audio !== undefined && model.audio) task.audio = !!patch.audio;
     if (patch.media !== undefined) task.media = sanitizeMedia(patch.media);
     task.updatedAt = now();
     this._changed();
@@ -153,11 +191,13 @@ class TaskManager extends EventEmitter {
     const src = this._find(id);
     if (!src) throw new Error('片段不存在');
     return this.create({
+      model: src.model,
       mode: src.mode,
       prompt: src.prompt,
       duration: src.duration,
       resolution: src.resolution,
       ratio: src.ratio,
+      audio: src.audio,
       media: src.media,
     });
   }
@@ -181,8 +221,10 @@ class TaskManager extends EventEmitter {
     task.updatedAt = now();
     this._changed();
     try {
-      const payload = await this._buildPayload(task);
-      task.remoteId = await api.submitTask(this.getSettings(), payload);
+      const model = getModel(task.model);
+      const adapter = adapterFor(model.protocol);
+      const items = await this._buildItems(task);
+      task.remoteId = await adapter.submit(this.getSettings(), task, items);
       task.status = 'queued';
       task.submittedAt = now();
       task._nextPoll = 0;
@@ -203,50 +245,46 @@ class TaskManager extends EventEmitter {
     return this.list();
   }
 
-  async _buildPayload(task) {
-    const content = [];
+  // 把任务组装成标准化 items：文本 + 素材（本地图片转 base64 data URI，视频/音频需 URL）
+  async _buildItems(task) {
+    const items = [];
     const prompt = (task.prompt || '').trim();
     if (task.mode === 'text' && !prompt) throw new Error('文生视频需要填写提示词');
-    if (prompt) content.push({ type: 'text', text: prompt });
-    content.push(...(await this._mediaContent(task)));
-    if (!content.length) throw new Error('请至少填写提示词或添加素材');
-    const payload = {
-      model: 'minimax-h3',
-      resolution: task.resolution,
-      duration: Number(task.duration),
-      content,
-    };
-    if (task.mode === 'text') payload.ratio = task.ratio;
-    return payload;
-  }
+    if (prompt) items.push({ type: 'text', text: prompt });
 
-  async _mediaContent(task) {
-    const items = [];
-    const push = (m, role, kind) => {
-      if (!m) return;
-      if (m.source === 'url' && m.url) {
-        const key = kind === 'image' ? 'image_url' : kind === 'video' ? 'video_url' : 'audio_url';
-        items.push({ type: key, [key]: { url: m.url }, role });
-        return;
-      }
+    const toItem = (m, role, kind) => {
+      if (!m) return null;
+      if (m.source === 'url' && m.url) return { kind, role, url: m.url };
       if (m.source === 'local' && m.path) {
         if (kind !== 'image') throw new Error('参考视频 / 参考音频请使用可公开访问的 URL');
         const mime = IMAGE_MIME[path.extname(m.path).toLowerCase()] || 'image/png';
         const b64 = fs.readFileSync(m.path).toString('base64');
-        items.push({ type: 'image_url', image_url: { url: `data:${mime};base64,${b64}` }, role });
+        return { kind, role, url: `data:${mime};base64,${b64}` };
       }
+      return null;
     };
+    const push = (m, role, kind) => {
+      const item = toItem(m, role, kind);
+      if (item) items.push(item);
+    };
+
     if (task.mode === 'image') {
       push(task.media.firstFrame, 'first_frame', 'image');
       push(task.media.lastFrame, 'last_frame', 'image');
-      if (!items.length) throw new Error('图生视频需要至少一张首帧图片');
+      if (!items.some((i) => i.role)) throw new Error('图生视频需要至少一张首帧图片');
     } else if (task.mode === 'reference') {
-      push(task.media.refImage, 'reference_image', 'image');
+      for (const m of task.media.refImages || []) push(m, 'reference_image', 'image');
       push(task.media.refVideo, 'reference_video', 'video');
       push(task.media.refAudio, 'reference_audio', 'audio');
       const hasVisual = items.some((i) => i.role === 'reference_image' || i.role === 'reference_video');
       if (!hasVisual) throw new Error('参考生视频至少需要参考图片或参考视频');
+    } else if (task.mode === 'edit') {
+      push(task.media.editVideo, 'edit_video', 'video');
+      for (const m of task.media.refImages || []) push(m, 'reference_image', 'image');
+      if (!items.some((i) => i.role === 'edit_video')) throw new Error('视频编辑需要一段源视频（URL）');
+      if (!prompt) throw new Error('视频编辑需要填写编辑指令');
     }
+    if (!items.length) throw new Error('请至少填写提示词或添加素材');
     return items;
   }
 
@@ -267,7 +305,9 @@ class TaskManager extends EventEmitter {
   async _poll(task) {
     task._polling = true;
     try {
-      const remote = await api.queryTask(this.getSettings(), task.remoteId);
+      const model = getModel(task.model);
+      const adapter = adapterFor(model.protocol);
+      const remote = await adapter.query(this.getSettings(), task.remoteId, task);
       task._nextPoll = now() + POLL_MS;
       this._applyRemote(task, remote);
     } catch (err) {
@@ -290,9 +330,8 @@ class TaskManager extends EventEmitter {
       task.status = status;
       dirty = true;
     } else if (status === 'succeeded') {
-      const url = remote.content && remote.content.url ? remote.content.url : '';
-      if (url && url !== task.videoUrl) {
-        task.videoUrl = url;
+      if (remote.videoUrl && remote.videoUrl !== task.videoUrl) {
+        task.videoUrl = remote.videoUrl;
         dirty = true;
       }
       if (task.status !== 'succeeded') {
@@ -304,7 +343,7 @@ class TaskManager extends EventEmitter {
     } else if (status === 'failed' || status === 'cancelled' || status === 'expired') {
       if (task.status !== status) {
         task.status = status;
-        task.error = (remote.error && remote.error.message) || remote.message || `任务${status}`;
+        task.error = remote.error || `任务${status}`;
         task.updatedAt = now();
         dirty = true;
       }
@@ -340,4 +379,4 @@ class TaskManager extends EventEmitter {
   }
 }
 
-module.exports = { TaskManager, RATIOS, RESOLUTIONS };
+module.exports = { TaskManager };

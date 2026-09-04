@@ -15,6 +15,8 @@ contextBridge.exposeInMainWorld('studio', {
   saveSettings: (patch) => invoke('settings:save', patch),
   testSettings: (draft) => invoke('settings:test', draft),
 
+  listModels: () => invoke('models:list'),
+
   listTasks: () => invoke('tasks:list'),
   createTask: (config) => invoke('task:create', config),
   updateTask: (id, patch) => invoke('task:update', id, patch),
