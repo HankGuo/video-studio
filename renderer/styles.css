@@ -184,6 +184,8 @@ body {
 .icon-btn:hover { background: var(--surface-3); color: var(--ink); }
 .icon-btn svg { width: 14px; height: 14px; }
 
+.icon-btn[disabled] { opacity: 0.45; cursor: not-allowed; }
+
 .hidden { display: none !important; }
 
 /* ---------- 布局 ---------- */
@@ -494,6 +496,22 @@ body {
   text-transform: none;
   font-size: 11.5px;
   color: var(--faint);
+}
+
+.section-label .sync-note {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sync-refresh { width: 20px; height: 20px; }
+.sync-refresh svg { width: 12px; height: 12px; }
+
+.sync-refresh.spinning svg { animation: spin 0.9s linear infinite; }
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 /* ---------- 模型选择器 ---------- */

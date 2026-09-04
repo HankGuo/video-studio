@@ -280,12 +280,82 @@ const MODELS = [
 
 const DEFAULT_MODEL = 'minimax-h3';
 
-function listModels() {
-  return MODELS.map((m) => ({ ...m, familyName: FAMILIES[m.family].name }));
+// 平台协议标识 → 适配器协议
+const PROTOCOL_MAP = {
+  'minimax:video_generation_v2': 'minimax',
+  'seedance:generations': 'seedance',
+  'wan3:video-synthesis': 'wan3',
+  'happyhorse:video-synthesis': 'happyhorse',
+  'kling:text2video': 'kling',
+  'kling:image2video': 'kling',
+  'kling:omni-video': 'kling-omni',
+};
+
+// 新上架模型（内置目录未收录）按协议给出保守的能力默认值；
+// 超出模型实际能力的参数会在提交时被网关校验并报错
+const PROTOCOL_DEFAULTS = {
+  minimax: { modes: ['text', 'image'], resolutions: ['768P'], duration: [1, 15], durationAuto: false, ratios: RATIOS_STD, audio: false },
+  seedance: { modes: ['text', 'image', 'reference'], resolutions: ['480p', '720p', '1080p'], duration: [4, 15], durationAuto: true, ratios: RATIOS_ADAPTIVE, audio: true },
+  wan3: { modes: ['text', 'image', 'reference', 'edit'], resolutions: ['480P', '720P', '1080P'], duration: [2, 30], durationAuto: true, ratios: RATIOS_ADAPTIVE, audio: true },
+  happyhorse: { modes: ['text', 'image', 'reference'], resolutions: ['720P', '1080P'], duration: [3, 15], durationAuto: false, ratios: ['16:9', '9:16', '1:1'], audio: false },
+  kling: { modes: ['text', 'image'], resolutions: ['720p', '1080p'], duration: [3, 15], durationAuto: false, ratios: ['16:9', '9:16', '1:1'], audio: true },
+  'kling-omni': { modes: ['text', 'image', 'reference', 'edit'], resolutions: ['720p', '1080p'], duration: [3, 15], durationAuto: false, ratios: ['16:9', '9:16', '1:1'], audio: true },
+};
+
+const PROTOCOL_FAMILY = {
+  minimax: 'minimax', seedance: 'seedance', wan3: 'wan', happyhorse: 'happyhorse', kling: 'kling', 'kling-omni': 'kling',
+};
+
+// 合并网关公开模型列表（GET /gateway/v1/models，匿名访问）：
+// 内置目录保持完整能力信息；目录之外、但走已知视频协议的新模型自动补入
+function mergeRemote(remoteModels) {
+  const known = new Set(MODELS.map((m) => m.id));
+  const added = [];
+  for (const rm of remoteModels || []) {
+    if (!rm || !rm.id || known.has(rm.id)) continue;
+    const protocols = Array.isArray(rm.supported_protocols) ? rm.supported_protocols : [];
+    const protoKey = protocols.find((p) => PROTOCOL_MAP[p]);
+    if (!protoKey) continue; // 未知协议族仍需适配器代码，不硬猜
+    const protocol = PROTOCOL_MAP[protoKey];
+    const defaults = PROTOCOL_DEFAULTS[protocol];
+    const rawName = String(rm.name || rm.id);
+    const shortName = rawName.includes(':') ? rawName.split(':').pop().trim() : rawName;
+    added.push({
+      id: rm.id,
+      name: shortName,
+      family: PROTOCOL_FAMILY[protocol],
+      protocol,
+      ...defaults,
+      badge: '新上架',
+      pricing: '价格以平台模型页为准',
+      desc: String(rm.description || '').slice(0, 60),
+      isRemote: true,
+    });
+  }
+  return MODELS.concat(added);
 }
 
-function getModel(id) {
-  return MODELS.find((m) => m.id === id) || MODELS.find((m) => m.id === DEFAULT_MODEL);
+// 模块级在线目录缓存：同步成功后写入，getModel/listModels 无参调用时自动使用
+let remoteCache = null;
+
+function setRemoteCache(list) {
+  remoteCache = Array.isArray(list) ? list : null;
 }
 
-module.exports = { MODELS, FAMILIES, DEFAULT_MODEL, listModels, getModel };
+function enrich(m) {
+  const fam = FAMILIES[m.family];
+  return { ...m, familyName: fam ? fam.name : m.family };
+}
+
+function listModels(remoteModels) {
+  const remote = remoteModels || remoteCache;
+  return (remote ? mergeRemote(remote) : MODELS).map(enrich);
+}
+
+function getModel(id, remoteModels) {
+  const remote = remoteModels || remoteCache;
+  const all = remote ? mergeRemote(remote) : MODELS;
+  return all.find((m) => m.id === id) || MODELS.find((m) => m.id === DEFAULT_MODEL);
+}
+
+module.exports = { MODELS, FAMILIES, DEFAULT_MODEL, PROTOCOL_MAP, listModels, getModel, mergeRemote, setRemoteCache };

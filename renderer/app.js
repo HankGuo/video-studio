@@ -32,6 +32,8 @@ const ICONS = {
 const state = {
   tasks: [],
   models: [],
+  modelSync: { source: 'builtin', syncedAt: 0 },
+  modelSyncing: false,
   selectedId: null,
   settings: null,
   detailSig: '',
@@ -68,6 +70,12 @@ function fmtElapsed(sinceTs) {
   const m = Math.floor(sec / 60);
   const s = sec % 60;
   return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+}
+
+function fmtClock(ts) {
+  const d = new Date(ts);
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 function showToast(message, tone = '') {
@@ -109,6 +117,60 @@ function ratioLabel(r) {
 
 function durationLabel(d) {
   return Number(d) === -1 ? '智能' : `${d}s`;
+}
+
+/* ---------------- 模型目录同步 ---------------- */
+
+function syncStatusText() {
+  const n = state.models.length;
+  const s = state.modelSync;
+  if (s.source === 'remote' && s.syncedAt) return `${n} MODELS · 已同步 ${fmtClock(s.syncedAt)}`;
+  if (s.source === 'cache') return `${n} MODELS · 本地缓存`;
+  return `${n} MODELS · 内置目录`;
+}
+
+// 只更新状态行与刷新按钮，避免为文案变化重渲染整个编辑器
+function updateSyncUI() {
+  const el = $('#sync-status');
+  if (el) el.textContent = syncStatusText();
+  const btn = $('[data-action="sync-models"]');
+  if (btn) {
+    btn.disabled = state.modelSyncing;
+    btn.classList.toggle('spinning', state.modelSyncing);
+  }
+}
+
+async function refreshModels(manual = false) {
+  if (state.modelSyncing) return;
+  state.modelSyncing = true;
+  updateSyncUI();
+  try {
+    const res = await studio.syncModels();
+    if (!res || !Array.isArray(res.models)) return;
+    const changed = res.models.map((m) => m.id).join(',') !== state.models.map((m) => m.id).join(',');
+    state.models = res.models;
+    state.modelSync = { source: res.source || 'builtin', syncedAt: res.syncedAt || 0 };
+    if (changed) {
+      // 目录有变化：重渲染编辑器里的模型选择器；当前任务已保存的模型 id 仍在列表中即保留
+      const t = getTask(state.selectedId);
+      if (t && editable(t)) {
+        await flushSave(t); // 先把未落盘的编辑保存掉，避免重渲染丢字
+        renderDetail(true);
+      }
+    }
+    if (manual) {
+      if (res.error) {
+        showToast(`模型目录同步失败，${res.source === 'cache' ? '已使用本地缓存' : '使用内置目录'}：${res.error}`, 'error');
+      } else {
+        showToast(`模型目录已同步（${res.models.length} 个模型）`, 'success');
+      }
+    }
+  } catch (err) {
+    if (manual) showToast(err.message, 'error');
+  } finally {
+    state.modelSyncing = false;
+    updateSyncUI();
+  }
 }
 
 /* ---------------- 自动保存管道 ---------------- */
@@ -558,7 +620,7 @@ function editorHtml(t) {
       </div>
       ${failedBanner}
       <section class="editor-section">
-        <span class="section-label">模型<span class="section-note">${state.models.length} MODELS · TOKENDANCE GATEWAY</span></span>
+        <span class="section-label">模型<span class="section-note sync-note"><span id="sync-status">${syncStatusText()}</span><button type="button" class="icon-btn sync-refresh ${state.modelSyncing ? 'spinning' : ''}" data-action="sync-models" title="同步模型目录" ${state.modelSyncing ? 'disabled' : ''}>${ICONS.refresh}</button></span></span>
         ${modelPickerHtml(t)}
       </section>
       ${modeSegmentedHtml(t, model)}
@@ -726,6 +788,9 @@ async function handleDetailAction(t, action, btn) {
   switch (action) {
     case 'new':
       await newTask();
+      break;
+    case 'sync-models':
+      await refreshModels(true);
       break;
     case 'duplicate':
       if (t) await duplicateTask(t.id);
@@ -1025,6 +1090,9 @@ async function boot() {
   }
   renderSidebar();
   renderDetail(true);
+
+  // 模型目录在线同步：先用内置/缓存目录完成首屏渲染，网络同步异步补齐
+  refreshModels();
 
   // 首次启动（未配置 API Key）时引导完成网关设置
   if (state.settings && !state.settings.apiKey) {

@@ -16,6 +16,7 @@ contextBridge.exposeInMainWorld('studio', {
   testSettings: (draft) => invoke('settings:test', draft),
 
   listModels: () => invoke('models:list'),
+  syncModels: () => invoke('models:sync'),
 
   listTasks: () => invoke('tasks:list'),
   createTask: (config) => invoke('task:create', config),
