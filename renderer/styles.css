@@ -120,7 +120,7 @@ body {
 
 .brand-sub {
   font-family: var(--mono);
-  font-size: 9.5px;
+  font-size: 11.5px;
   letter-spacing: 0.14em;
   color: var(--faint);
   line-height: 1.3;
@@ -222,7 +222,7 @@ body {
 
 .queue-count {
   font-family: var(--mono);
-  font-size: 10.5px;
+  font-size: 11.5px;
   color: var(--faint);
   background: var(--surface-2);
   border: 1px solid var(--border);
@@ -272,7 +272,7 @@ body {
 
 .card-model {
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--ink);
   overflow: hidden;
@@ -301,7 +301,7 @@ body {
   justify-content: space-between;
   gap: 8px;
   font-family: var(--mono);
-  font-size: 10px;
+  font-size: 12px;
   letter-spacing: 0.02em;
   color: var(--faint);
 }
@@ -351,7 +351,7 @@ body {
   align-items: center;
   gap: 5px;
   font-family: var(--mono);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.06em;
   padding: 2.5px 8px;
@@ -418,7 +418,7 @@ body {
 .detail-sub {
   margin-top: 4px;
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: 12px;
   color: var(--faint);
   letter-spacing: 0.03em;
 }
@@ -459,7 +459,7 @@ body {
 .empty-state .empty-hint {
   margin-top: 18px;
   font-family: var(--mono);
-  font-size: 10.5px;
+  font-size: 11.5px;
   letter-spacing: 0.06em;
   color: var(--faint);
 }
@@ -479,7 +479,7 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.1em;
   color: var(--faint);
@@ -492,7 +492,7 @@ body {
   font-weight: 400;
   letter-spacing: 0.02em;
   text-transform: none;
-  font-size: 10.5px;
+  font-size: 11.5px;
   color: var(--faint);
 }
 
@@ -506,7 +506,7 @@ body {
   align-items: center;
   gap: 8px;
   font-family: var(--mono);
-  font-size: 10.5px;
+  font-size: 11.5px;
   letter-spacing: 0.08em;
   color: var(--faint);
   margin-bottom: 8px;
@@ -556,7 +556,7 @@ body {
 
 .model-card-name {
   flex: 1 1 100%;
-  font-size: 12.5px;
+  font-size: 13.5px;
   font-weight: 600;
   color: var(--ink);
   overflow: hidden;
@@ -566,7 +566,7 @@ body {
 
 .model-badge {
   flex: none;
-  font-size: 9.5px;
+  font-size: 11.5px;
   font-weight: 500;
   color: var(--accent);
   border: 1px solid rgba(34, 197, 94, 0.4);
@@ -577,7 +577,7 @@ body {
 
 .model-card-id {
   font-family: var(--mono);
-  font-size: 9.5px;
+  font-size: 11.5px;
   color: var(--faint);
   margin-top: 3px;
   overflow: hidden;
@@ -587,7 +587,7 @@ body {
 
 .model-card-pricing {
   font-family: var(--mono);
-  font-size: 9.5px;
+  font-size: 11.5px;
   color: var(--muted);
   margin-top: 6px;
   overflow: hidden;
@@ -596,7 +596,7 @@ body {
 }
 
 .model-card-desc {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--faint);
   margin-top: 4px;
   line-height: 1.45;
@@ -668,8 +668,8 @@ textarea.prompt-input::placeholder { color: var(--faint); }
 
 .chip {
   font-family: var(--mono);
-  font-size: 11.5px;
-  padding: 6px 12px;
+  font-size: 12.5px;
+  padding: 7px 13px;
   border: 1px solid var(--border);
   border-radius: 7px;
   background: var(--surface-2);
@@ -767,7 +767,7 @@ input::placeholder { color: var(--faint); }
 
 .media-slot-title { font-size: 12.5px; font-weight: 600; color: var(--ink); }
 
-.media-required { color: var(--accent); font-size: 10.5px; font-weight: 500; margin-left: 5px; font-family: var(--mono); }
+.media-required { color: var(--accent); font-size: 11.5px; font-weight: 500; margin-left: 5px; font-family: var(--mono); }
 
 .media-filled {
   display: flex;
@@ -792,7 +792,7 @@ input::placeholder { color: var(--faint); }
   flex: 1;
   min-width: 0;
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -803,7 +803,7 @@ input::placeholder { color: var(--faint); }
 
 .media-empty .url-input { flex: 1; }
 
-.media-or { font-size: 11px; color: var(--faint); flex: none; }
+.media-or { font-size: 12px; color: var(--faint); flex: none; }
 
 /* 参考图网格 */
 
@@ -834,7 +834,7 @@ input::placeholder { color: var(--faint); }
 
 .ref-item .ref-url-tag {
   font-family: var(--mono);
-  font-size: 9px;
+  font-size: 11.5px;
   color: var(--faint);
   padding: 4px 6px;
   overflow: hidden;
@@ -874,7 +874,7 @@ input::placeholder { color: var(--faint); }
 
 .editor-foot .save-state {
   font-family: var(--mono);
-  font-size: 10.5px;
+  font-size: 11.5px;
   color: var(--faint);
   letter-spacing: 0.03em;
 }
@@ -1007,11 +1007,11 @@ input::placeholder { color: var(--faint); }
 
 .meta-val { flex: 1; min-width: 0; color: var(--ink); word-break: break-all; }
 
-.meta-val.mono { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+.meta-val.mono { font-family: var(--mono); font-size: 12px; color: var(--muted); }
 
 .meta-val .inline-btn {
   margin-left: 8px;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--accent);
   background: none;
   border: none;
@@ -1060,7 +1060,7 @@ input::placeholder { color: var(--faint); }
 
 .field-label {
   display: block;
-  font-size: 10.5px;
+  font-size: 11.5px;
   font-weight: 600;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -1068,7 +1068,7 @@ input::placeholder { color: var(--faint); }
   margin-bottom: 7px;
 }
 
-.field-hint { display: block; font-size: 11px; color: var(--faint); margin-top: 6px; }
+.field-hint { display: block; font-size: 12px; color: var(--faint); margin-top: 6px; }
 
 .key-row { display: flex; gap: 8px; }
 .key-row input { flex: 1; font-family: var(--mono); font-size: 12px; }
@@ -1132,7 +1132,7 @@ input::placeholder { color: var(--faint); }
 ::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.18); border: 2px solid transparent; background-clip: content-box; }
 ::-webkit-scrollbar-track { background: transparent; }
 
-.draft-count { font-family: var(--mono); font-size: 10.5px; color: var(--faint); margin-left: 2px; }
+.draft-count { font-family: var(--mono); font-size: 11.5px; color: var(--faint); margin-left: 2px; }
 
 /* ---------- 动效降级 ---------- */
 
