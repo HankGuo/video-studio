@@ -1,5 +1,7 @@
 node_modules/
 .DS_Store
+dist/
+.runtime/
 
 # 公众号素材（仅本地，不入库）
 docs/wechat-article.html

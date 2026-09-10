@@ -10,7 +10,21 @@
 
 ## 快速开始
 
-唯一的前置依赖是 **Node.js 18 或更高版本**（[下载地址](https://nodejs.org/)）。除此之外零依赖、零安装、零构建。
+### 方式一：桌面安装包（推荐，零门槛）
+
+到 [GitHub Releases](https://github.com/HankGuo/video-studio/releases) 下载对应平台的安装包，双击即用——不需要安装 Node.js，不需要碰终端：
+
+| 平台 | 下载 | 首次打开 |
+| --- | --- | --- |
+| macOS | `…-arm64.zip`（Apple 芯片）/ `…-x64.zip`（Intel） | 未买 Apple 签名证书：首次**右键 → 打开**即可 |
+| Windows | `…-Setup.exe`（安装向导）或 `…-win.zip`（绿色版） | SmartScreen 提示时点「更多信息 → 仍要运行」 |
+| Linux | `…-AppImage` | `chmod +x` 后双击运行 |
+
+桌面版是一个 ~60 行的 Electron 薄壳（`desktop/main.js`）：起本地服务后开一个**没有地址栏、没有导航、没有菜单栏**的独立窗口，用起来的体感就是一个普通桌面应用，察觉不到 Web 技术的存在。内核与浏览器版完全同源。
+
+### 方式二：源码启动（开发者）
+
+唯一的前置依赖是 **Node.js 18 或更高版本**（[下载地址](https://nodejs.org/)）。除此之外运行时零依赖、零安装、零构建。
 
 ```bash
 git clone https://github.com/HankGuo/video-studio.git
@@ -32,15 +46,17 @@ npm start
 
 > 重复启动不会开重复的服务：如果已有实例在运行，再次启动只会帮你在浏览器里再开一个标签页。端口被别的程序占用时，可以用 `VIDEO_STUDIO_PORT=9000 npm start` 换端口。
 
-## 为什么是本地 Web UI（v3 拆掉了 Electron）
+## 为什么是本地 Web UI（拆掉了 Electron）
 
-v1/v2 用 Electron 套了个壳。回头看，这并没有解决任何实际问题——它只是让应用"看起来像一个 Mac 应用"，代价却是：
+早期版本用 Electron 套了个壳。回头看，这并没有解决任何实际问题——它只是让应用"看起来像一个 Mac 应用"，代价却是：
 
 - 两百多兆的运行时，换一个协议转换控制台；
 - 只能方便地打 macOS 安装包，反而**丢掉了跨平台能力**；
 - 签名、公证、DMG 打包……全是和"生成视频"无关的负担。
 
-这个项目说到底就是个本地服务加一个页面，和各家 AI CLI 提供的本地 Web UI 是同一个形态。所以 v3 回归简单：**一个零依赖的 Node 小服务器 + 一个浏览器页面**，一行命令或双击一个文件就能启动，macOS / Windows / Linux 通吃，源码也从"Electron 主进程 + 预加载脚本 + 渲染层"塌缩成人人能读懂的几百行普通 Node 代码。
+这个项目说到底就是个本地服务加一个页面，和各家 AI CLI 提供的本地 Web UI 是同一个形态。所以现在回归简单：**一个零依赖的 Node 小服务器 + 一个浏览器页面**，一行命令或双击一个文件就能启动，macOS / Windows / Linux 通吃，源码也从"Electron 主进程 + 预加载脚本 + 渲染层"塌缩成人人能读懂的几百行普通 Node 代码。
+
+> 那 Releases 里的桌面安装包又是怎么回事？——拆掉的是**运行时对 Electron 的依赖**（IPC、预加载脚本、主进程架构），而不是 Electron 这个分发渠道。现在的桌面版只是一个 60 行的薄壳：起服务、开一个无浏览器痕迹的窗口，完。内核永远是同一份代码，浏览器版与桌面版不会分叉。
 
 ## 为什么没做画布和时间线（大道至简）
 
@@ -147,6 +163,7 @@ v1/v2 用 Electron 套了个壳。回头看，这并没有解决任何实际问�
 
 - **零依赖 Node.js 服务器**（`server.js`，仅标准库，Node 18+）：托管页面、JSON API、SSE 状态推送、任务队列、视频下载与本地持久化；只监听 `127.0.0.1` 并校验 Host 头（防 DNS rebinding），媒体输出与文件操作严格限制在数据目录内
 - **原生 HTML / CSS / JS** 界面：零框架、零构建，手撕贴纸风 × 中性专业工作台（Baloo 2 + IBM Plex Sans + JetBrains Mono 本地字体），面向 13 英寸及以上 PC 屏幕流体伸缩
+- **Electron 薄壳**（`desktop/main.js`，可选分发形态）：无 IPC、无 preload，窗口与服务走 127.0.0.1 HTTP/SSE；打包用 `electron` / `electron-builder` 仅在 `devDependencies`，`npm run pack:mac|win|linux` 一台机器出三平台安装包
 - **词元跳动统一模型网关**，五种视频协议适配（`main/protocols.js`）：
   - `minimax:video_generation_v2`（MiniMax H3 系列）
   - `seedance:generations`（Ark 异步任务，Seedance 全系）
@@ -210,7 +227,7 @@ VIDEO_STUDIO_USER_DATA=/tmp/vs npm start    # 隔离数据目录
 
 ## 致谢 WorkBuddy × Kimi
 
-本项目 v1 由 [WorkBuddy](https://www.codebuddy.cn/work/) 搭载 Kimi K3 模型独立完成，v2 全量模型扩展、v3 去 Electron 化改造由 Kimi Code 完成。作者只负责提需求、喝茶和验收。这本身就是一次"AI 造 AI 工具"的完整实践。
+本项目首个版本由 [WorkBuddy](https://www.codebuddy.cn/work/) 搭载 Kimi K3 模型独立完成，后续的全量模型扩展、去 Electron 化改造与桌面薄壳由 Kimi Code 完成。作者只负责提需求、喝茶和验收。这本身就是一次"AI 造 AI 工具"的完整实践。
 
 ## 关注博主「算力白肉」
 

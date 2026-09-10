@@ -1,13 +1,21 @@
 {
   "name": "video-studio",
-  "version": "3.0.0",
+  "version": "0.1.0",
   "description": "TokenDance 视频 Playground - 词元跳动全量视频模型的本地接入工作台",
   "main": "server.js",
   "license": "MIT",
   "author": "算力白肉",
   "scripts": {
     "start": "node server.js",
-    "test": "node test/server.js"
+    "test": "node test/server.js",
+    "pack": "electron-builder",
+    "pack:mac": "electron-builder --mac",
+    "pack:win": "electron-builder --win",
+    "pack:linux": "electron-builder --linux"
+  },
+  "devDependencies": {
+    "electron": "^44.3.0",
+    "electron-builder": "^26.15.3"
   },
   "engines": {
     "node": ">=18"
