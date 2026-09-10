@@ -1,6 +1,4 @@
 node_modules/
-dist/
-test/shots/
 .DS_Store
 
 # 公众号素材（仅本地，不入库）

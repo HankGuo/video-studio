@@ -5,7 +5,7 @@ const path = require('path');
 const crypto = require('crypto');
 const { EventEmitter } = require('events');
 const { adapterFor } = require('./protocols');
-const { getModel, DEFAULT_MODEL } = require('./models');
+const { getModel, findModel, DEFAULT_MODEL } = require('./models');
 
 const POLL_MS = 4000;
 const TICK_MS = 1500;
@@ -105,6 +105,16 @@ class TaskManager extends EventEmitter {
 
   stop() {
     if (this._tickTimer) clearInterval(this._tickTimer);
+    this._tickTimer = null;
+  }
+
+  // 退出前把防抖中的落盘立即写掉，避免 Ctrl+C 丢失最后几百毫秒的编辑
+  flush() {
+    if (this._saveTimer) {
+      clearTimeout(this._saveTimer);
+      this._saveTimer = null;
+    }
+    this._persist();
   }
 
   _find(id) {
@@ -221,13 +231,16 @@ class TaskManager extends EventEmitter {
     task.updatedAt = now();
     this._changed();
     try {
-      const model = getModel(task.model);
+      const model = findModel(task.model);
+      if (!model) throw new Error(`模型 ${task.model} 已从目录下线，请复制为新片段后重新选择模型`);
       const adapter = adapterFor(model.protocol);
       const items = await this._buildItems(task);
       task.remoteId = await adapter.submit(this.getSettings(), task, items);
       task.status = 'queued';
       task.submittedAt = now();
       task._nextPoll = 0;
+      task._pollErrors = 0;
+      task._emptyResults = 0;
     } catch (err) {
       task.status = 'failed';
       task.error = err.message;
@@ -305,16 +318,29 @@ class TaskManager extends EventEmitter {
   async _poll(task) {
     task._polling = true;
     try {
-      const model = getModel(task.model);
+      const model = findModel(task.model);
+      if (!model) throw Object.assign(new Error(`模型 ${task.model} 已从目录下线，无法继续跟踪`), { httpStatus: 410 });
       const adapter = adapterFor(model.protocol);
       const remote = await adapter.query(this.getSettings(), task.remoteId, task);
+      task._pollErrors = 0;
       task._nextPoll = now() + POLL_MS;
       this._applyRemote(task, remote);
     } catch (err) {
+      task._pollErrors = (task._pollErrors || 0) + 1;
       task._nextPoll = now() + POLL_MS * 2; // 网络异常时退避
+      let terminal = null;
       if (err.httpStatus === 404) {
+        terminal = '远端任务不存在或已过期';
+      } else if (err.httpStatus === 410) {
+        terminal = err.message;
+      } else if (err.httpStatus === 401 || err.httpStatus === 403) {
+        terminal = `网关鉴权失败，请在设置中检查 API Key：${err.message}`;
+      } else if (task._pollErrors >= 10) {
+        terminal = `网关持续不可达（已重试 ${task._pollErrors} 次）：${err.message}`;
+      }
+      if (terminal) {
         task.status = 'failed';
-        task.error = '远端任务不存在或已过期';
+        task.error = terminal;
         task.updatedAt = now();
         this._changed();
       }
@@ -330,6 +356,19 @@ class TaskManager extends EventEmitter {
       task.status = status;
       dirty = true;
     } else if (status === 'succeeded') {
+      // 网关可能先返回 succeeded、稍后才给出视频地址：没有地址时继续轮询几次
+      if (!remote.videoUrl && !task.videoUrl) {
+        task._emptyResults = (task._emptyResults || 0) + 1;
+        if (task._emptyResults <= 6) {
+          task._nextPoll = now() + POLL_MS;
+          return;
+        }
+        task.status = 'failed';
+        task.error = '网关已标记完成但未返回视频地址，请到词元跳动控制台核对后重试';
+        task.updatedAt = now();
+        this._changed();
+        return;
+      }
       if (remote.videoUrl && remote.videoUrl !== task.videoUrl) {
         task.videoUrl = remote.videoUrl;
         dirty = true;
@@ -352,18 +391,31 @@ class TaskManager extends EventEmitter {
   }
 
   async _download(task, url) {
-    if (task._downloading) return;
+    if (task._downloading) return false;
     task._downloading = true;
     try {
-      const res = await fetch(url);
-      if (!res.ok) throw new Error(`视频下载失败（HTTP ${res.status}）`);
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 5 * 60 * 1000); // 大文件最多下 5 分钟
+      const res = await fetch(url, { signal: ctrl.signal });
+      if (!res.ok) {
+        clearTimeout(timer);
+        throw new Error(`视频下载失败（HTTP ${res.status}）`);
+      }
       const buf = Buffer.from(await res.arrayBuffer());
-      const file = path.join(this.videoDir, `${task.id}.mp4`);
+      clearTimeout(timer);
+      const ct = String(res.headers.get('content-type') || '').toLowerCase();
+      const ext = ct.includes('quicktime') ? '.mov' : ct.includes('webm') ? '.webm' : '.mp4';
+      const file = path.join(this.videoDir, `${task.id}${ext}`);
       fs.writeFileSync(file, buf);
+      if (task.videoPath && task.videoPath !== file) {
+        try { fs.unlinkSync(task.videoPath); } catch { /* 旧文件可能已不存在 */ }
+      }
       task.videoPath = file;
       task.downloadError = '';
+      return true;
     } catch (err) {
-      task.downloadError = err.message;
+      task.downloadError = err && err.name === 'AbortError' ? '视频下载超时（5 分钟），请点击重新下载' : err.message;
+      return false;
     } finally {
       task._downloading = false;
       task.updatedAt = now();
@@ -374,6 +426,7 @@ class TaskManager extends EventEmitter {
   async redownload(id) {
     const task = this._find(id);
     if (!task || !task.videoUrl) throw new Error('没有可下载的视频地址');
+    if (task._downloading) throw new Error('正在下载中，请稍候');
     await this._download(task, task.videoUrl);
     return this._public(task);
   }

@@ -6,12 +6,21 @@
 // role ∈ first_frame | last_frame | reference_image | reference_video | reference_audio | edit_video
 // query 统一返回 { status, videoUrl, error }，status ∈ queued|running|succeeded|failed|cancelled|expired
 
+const { APP_URL } = require('./oauth');
+
+// 应用归因（https://tokendance.space/docs/app-attribution）：请求维度统一带 X-App-URL
+const RECOVERY_HINTS = {
+  top_up_balance: '账户余额不足，请到词元跳动控制台充值后重试（当前 Key 仍然有效）',
+  reauthorize_api_key: 'API Key 缺失、已禁用或已过期，请在设置中重新授权或更换 Key',
+  api_key_quota: 'API Key 已达周期额度上限，请等待额度刷新或重新授权',
+};
+
 function joinUrl(base, suffix) {
   return String(base || '').replace(/\/+$/, '') + suffix;
 }
 
 async function requestJson(settings, method, path, body, extraHeaders) {
-  const headers = { Authorization: `Bearer ${settings.apiKey}`, ...(extraHeaders || {}) };
+  const headers = { Authorization: `Bearer ${settings.apiKey}`, 'X-App-URL': APP_URL, ...(extraHeaders || {}) };
   if (body !== undefined) headers['Content-Type'] = 'application/json';
   const res = await fetch(joinUrl(settings.endpoint, path), {
     method,
@@ -22,12 +31,15 @@ async function requestJson(settings, method, path, body, extraHeaders) {
   let data = null;
   try { data = text ? JSON.parse(text) : null; } catch { data = null; }
   if (!res.ok || (data && (data.type === 'error' || data.error))) {
-    const message =
+    let message =
       (data && data.error && data.error.message) ||
       (data && data.message) ||
       (data ? `请求失败（HTTP ${res.status}）` : `网关返回非 JSON 响应（HTTP ${res.status}）`);
+    const recovery = res.headers.get('TokenDance-Recovery-Action');
+    if (recovery && RECOVERY_HINTS[recovery]) message += `（${RECOVERY_HINTS[recovery]}）`;
     const err = new Error(message);
     err.httpStatus = res.status;
+    err.recoveryAction = recovery || '';
     throw err;
   }
   return data;

@@ -1,43 +1,15 @@
 {
   "name": "video-studio",
-  "version": "2.0.0",
-  "description": "TokenDance 视频接入助手 - 词元跳动全量视频模型的本地接入工作台",
-  "main": "main/main.js",
+  "version": "3.0.0",
+  "description": "TokenDance 视频 Playground - 词元跳动全量视频模型的本地接入工作台",
+  "main": "server.js",
   "license": "MIT",
   "author": "算力白肉",
   "scripts": {
-    "start": "electron .",
-    "pack:dmg": "electron-builder --mac dmg --arm64"
+    "start": "node server.js",
+    "test": "node test/server.js"
   },
-  "build": {
-    "appId": "com.personal.videostudio",
-    "productName": "TokenDance Video Studio",
-    "directories": {
-      "output": "dist"
-    },
-    "files": [
-      "main/**",
-      "renderer/**",
-      "assets/**"
-    ],
-    "mac": {
-      "category": "public.app-category.video",
-      "identity": null,
-      "icon": "assets/icon.icns",
-      "target": [
-        "dmg"
-      ]
-    },
-    "dmg": {
-      "title": "TokenDance 视频接入助手",
-      "window": {
-        "width": 540,
-        "height": 380
-      }
-    }
-  },
-  "devDependencies": {
-    "electron": "^43.4.0",
-    "electron-builder": "^26.15.3"
+  "engines": {
+    "node": ">=18"
   }
 }

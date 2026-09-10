@@ -13,6 +13,44 @@ const DEFAULT_MODEL = 'minimax-h3';
 const LAST_MODEL_KEY = 'td-last-model';
 const QUICK_DURATIONS = [3, 4, 5, 6, 8, 10, 12, 15, 20, 25, 30];
 
+/* ---------------- 主题（夜间 / 日间 / 跟随系统） ---------------- */
+
+const THEME_KEY = 'td-theme';
+const THEME_ORDER = ['dark', 'light', 'system'];
+const THEME_LABEL = { dark: '夜间模式', light: '日间模式', system: '跟随系统' };
+const THEME_ICONS = {
+  dark: '<svg viewBox="0 0 24 24"><path d="M20 13.5A8 8 0 1 1 10.5 4 6.5 6.5 0 0 0 20 13.5z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>',
+  light: '<svg viewBox="0 0 24 24"><path d="M12 3v2M12 19v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M3 12h2M19 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="1.7"/></svg>',
+  system: '<svg viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="12.5" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M9 20.5h6M12 17v3.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>',
+};
+
+function currentThemePref() {
+  try { return localStorage.getItem(THEME_KEY) || 'system'; } catch { return 'system'; }
+}
+
+function applyTheme() {
+  const pref = currentThemePref();
+  const resolved = pref === 'system'
+    ? (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark')
+    : pref;
+  document.documentElement.dataset.theme = resolved;
+  const btn = $('#btn-theme');
+  if (btn) {
+    btn.innerHTML = THEME_ICONS[pref];
+    btn.title = `主题：${THEME_LABEL[pref]}（点击切换）`;
+  }
+}
+
+function cycleTheme() {
+  const next = THEME_ORDER[(THEME_ORDER.indexOf(currentThemePref()) + 1) % THEME_ORDER.length];
+  try { localStorage.setItem(THEME_KEY, next); } catch { /* 忽略 */ }
+  applyTheme();
+}
+
+matchMedia('(prefers-color-scheme: light)').addEventListener('change', () => {
+  if (currentThemePref() === 'system') applyTheme();
+});
+
 const ICONS = {
   plus: '<svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
   play: '<svg viewBox="0 0 24 24"><path d="M8 5.5v13l11-6.5z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>',
@@ -26,8 +64,26 @@ const ICONS = {
   video: '<svg viewBox="0 0 24 24"><rect x="3" y="5.5" width="13" height="13" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="m16 10.5 5-3v9l-5-3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>',
   music: '<svg viewBox="0 0 24 24"><path d="M9 18.5V6l11-2.5V16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><circle cx="6.5" cy="18.5" r="2.5" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="17.5" cy="16" r="2.5" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>',
   link: '<svg viewBox="0 0 24 24"><path d="M10 14a4.5 4.5 0 0 0 6.4.4l3-3a4.5 4.5 0 0 0-6.4-6.4l-1.6 1.6M14 10a4.5 4.5 0 0 0-6.4-.4l-3 3a4.5 4.5 0 0 0 6.4 6.4l1.6-1.6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>',
+  shield: '<svg viewBox="0 0 24 24"><path d="M12 3.2 5 5.8v5.4c0 4.4 3 8.2 7 9.6 4-1.4 7-5.2 7-9.6V5.8z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="m9.2 11.6 1.9 1.9 3.7-3.7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   x: '<svg viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',
 };
+
+/* 厂商官方图标（路径来自 simple-icons，CC0 授权），按家族 key 着色 */
+const FAMILY_ICONS = {
+  minimax: 'M11.43 3.92a.86.86 0 1 0-1.718 0v14.236a1.999 1.999 0 0 1-3.997 0V9.022a.86.86 0 1 0-1.718 0v3.87a1.999 1.999 0 0 1-3.997 0V11.49a.57.57 0 0 1 1.139 0v1.404a.86.86 0 0 0 1.719 0V9.022a1.999 1.999 0 0 1 3.997 0v9.134a.86.86 0 0 0 1.719 0V3.92a1.998 1.998 0 1 1 3.996 0v11.788a.57.57 0 1 1-1.139 0zm10.572 3.105a2 2 0 0 0-1.999 1.997v7.63a.86.86 0 0 1-1.718 0V3.923a1.999 1.999 0 0 0-3.997 0v16.16a.86.86 0 0 1-1.719 0V18.08a.57.57 0 1 0-1.138 0v2a1.998 1.998 0 0 0 3.996 0V3.92a.86.86 0 0 1 1.719 0v12.73a1.999 1.999 0 0 0 3.996 0V9.023a.86.86 0 1 1 1.72 0v6.686a.57.57 0 0 0 1.138 0V9.022a2 2 0 0 0-1.998-1.997',
+  wan: 'M3.996 4.517h5.291L8.01 6.324 4.153 7.506a1.668 1.668 0 0 0-1.165 1.601v5.786a1.668 1.668 0 0 0 1.165 1.6l3.857 1.183 1.277 1.807H3.996A3.996 3.996 0 0 1 0 15.487V8.513a3.996 3.996 0 0 1 3.996-3.996m16.008 0h-5.291l1.277 1.807 3.857 1.182c.715.227 1.17.889 1.165 1.601v5.786a1.668 1.668 0 0 1-1.165 1.6l-3.857 1.183-1.277 1.807h5.291A3.996 3.996 0 0 0 24 15.487V8.513a3.996 3.996 0 0 0-3.996-3.996m-4.007 8.345H8.002v-1.804h7.995Z',
+  seedance: 'M19.8772 1.4685L24 2.5326v18.9426l-4.1228 1.0563V1.4685zm-13.3481 9.428l4.115 1.0641v8.9786l-4.115 1.0642v-11.107zM0 2.572l4.115 1.0642v16.7354L0 21.428V2.572zm17.4553 5.6205v11.107l-4.1228-1.0642V9.2568l4.1228-1.0642z',
+  kling: 'M5.493 21.234c-1.112-1.451-1.109-4.263-.081-7.459l-4.557-2.63a1.683 1.683 0 01-.85-1.304 1.505 1.505 0 01.08-.622 13.18 13.18 0 011.037-2.255c3.476-6.02 10.916-8.23 16.619-4.938.46.266.82.67 1.081 1.184.785 1.545.685 4.096-.234 6.954l4.557 2.631c.339.196.596.492.736.832a1.53 1.53 0 01.034 1.093 13.146 13.146 0 01-1.037 2.255c-3.476 6.02-10.916 8.23-16.619 4.938a2.6 2.6 0 01-.766-.68zm11.096-6.615c-2.073 3.591-5.808 5.316-8.343 3.852-1.267-.731-1.994-2.122-2.145-3.778-.095-1.035.036-2.173.4-3.32.217-.684.517-1.37.902-2.039l.008-.014c2.073-3.59 5.808-5.315 8.343-3.852.633.366 1.13.895 1.49 1.54.986 1.772.922 4.415-.285 6.914-.111.23-.232.457-.362.683l-.008.014z',
+  happyhorse: 'M12 3.4A7.6 7.6 0 0 0 4.4 11v7.3c0 .8.7 1.5 1.5 1.5h2.5c.8 0 1.5-.7 1.5-1.5V11a2.1 2.1 0 1 1 4.2 0v7.3c0 .8.7 1.5 1.5 1.5h2.5c.8 0 1.5-.7 1.5-1.5V11A7.6 7.6 0 0 0 12 3.4z',
+};
+
+function famIcon(key) {
+  const d = FAMILY_ICONS[key];
+  if (!d) return '';
+  // 可灵官方环形 logo 依赖 evenodd 抠出环内镂空；其余图标不需要
+  const rule = key === 'kling' ? ' fill-rule="evenodd" clip-rule="evenodd"' : '';
+  return `<svg class="fam-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path${rule} d="${d}"/></svg>`;
+}
 
 const state = {
   tasks: [],
@@ -38,7 +94,11 @@ const state = {
   settings: null,
   detailSig: '',
   saveStateTimer: null,
+  filter: 'all',
 };
+
+// 快捷键提示里的修饰键符号
+const MOD_HINT = /Mac/i.test(navigator.platform || '') ? '⌘' : 'Ctrl+';
 
 let pendingPatch = {};
 let saveDebounce = null;
@@ -54,8 +114,9 @@ function escapeHtml(str) {
     .replace(/'/g, '&#39;');
 }
 
-function toFileUrl(p) {
-  return 'file://' + String(p).split('/').map(encodeURIComponent).join('/');
+// 本地文件通过服务器的 /media 端点流式输出（支持 Range，视频可拖动进度）
+function toMediaUrl(p) {
+  return '/media?path=' + encodeURIComponent(String(p));
 }
 
 function fmtTime(ts) {
@@ -97,6 +158,11 @@ function getTask(id) {
 function getModel(id) {
   return state.models.find((m) => m.id === id) || state.models.find((m) => m.id === DEFAULT_MODEL) || null;
 }
+
+// 「在文件夹中显示」按钮文案按平台区分
+const IS_MAC = /Mac/i.test(navigator.platform || '');
+const IS_WIN = /Win/i.test(navigator.platform || '');
+const REVEAL_LABEL = IS_MAC ? '在 Finder 中显示' : IS_WIN ? '在资源管理器中显示' : '在文件夹中显示';
 
 function editable(t) {
   return t && (t.status === 'draft' || t.status === 'failed');
@@ -211,6 +277,34 @@ function scheduleSave(t, patch) {
 
 /* ---------------- 侧栏 ---------------- */
 
+const QUEUE_FILTERS = [
+  { key: 'all', label: '全部' },
+  { key: 'draft', label: '草稿' },
+  { key: 'active', label: '进行中' },
+  { key: 'succeeded', label: '完成' },
+  { key: 'failed', label: '失败' },
+];
+const ACTIVE_STATUSES = ['submitting', 'queued', 'running'];
+
+function taskInGroup(t, key) {
+  switch (key) {
+    case 'draft': return t.status === 'draft';
+    case 'active': return ACTIVE_STATUSES.includes(t.status);
+    case 'succeeded': return t.status === 'succeeded';
+    case 'failed': return t.status === 'failed';
+    default: return true;
+  }
+}
+
+function renderQueueFilters() {
+  const box = $('#queue-filters');
+  if (!box) return;
+  box.innerHTML = QUEUE_FILTERS.map((f) => {
+    const n = state.tasks.filter((t) => taskInGroup(t, f.key)).length;
+    return `<button type="button" class="qchip ${state.filter === f.key ? 'active' : ''}" data-filter="${f.key}">${f.label}<span class="qchip-n">${n}</span></button>`;
+  }).join('');
+}
+
 function badge(t) {
   const pulse = t.status === 'running' || t.status === 'submitting' ? ' pulse' : '';
   return `<span class="badge badge-${t.status}${pulse}">${STATUS_LABEL[t.status] || t.status}</span>`;
@@ -223,6 +317,14 @@ function metaLine(t) {
   return parts.join(' · ');
 }
 
+/* 侧栏卡片的参数用彩色小签呈现，替代一长串点分文字 */
+function metaChipsHtml(t) {
+  const parts = [MODE_LABEL[t.mode] || t.mode, durationLabel(t.duration), t.resolution];
+  if (t.ratio) parts.push(ratioLabel(t.ratio));
+  if (t.audio) parts.push('有声');
+  return parts.map((p) => `<span class="meta-chip">${escapeHtml(p)}</span>`).join('');
+}
+
 function renderSidebar() {
   const list = $('#task-list');
   const drafts = state.tasks.filter((t) => t.status === 'draft').length;
@@ -230,13 +332,21 @@ function renderSidebar() {
   $('#queue-count').textContent = String(state.tasks.length);
   $('#btn-submit-all').classList.toggle('hidden', drafts === 0);
   $('#draft-count').textContent = drafts ? `（${drafts}）` : '';
+  renderQueueFilters();
 
   if (!state.tasks.length) {
     list.innerHTML = '';
     return;
   }
 
-  list.innerHTML = state.tasks.map((t) => {
+  const visible = state.tasks.filter((t) => taskInGroup(t, state.filter));
+  if (!visible.length) {
+    const label = (QUEUE_FILTERS.find((f) => f.key === state.filter) || {}).label || '';
+    list.innerHTML = `<div class="queue-empty">没有「${label}」状态的片段</div>`;
+    return;
+  }
+
+  list.innerHTML = visible.map((t) => {
     const prompt = (t.prompt || '').trim();
     const model = getModel(t.model);
     const actions = [];
@@ -248,15 +358,15 @@ function renderSidebar() {
     const runningBar = (t.status === 'running' || t.status === 'queued' || t.status === 'submitting')
       ? '<div class="running-bar"><i></i></div>' : '';
     return `
-      <article class="task-card ${t.id === state.selectedId ? 'selected' : ''}" data-id="${t.id}">
+      <article class="task-card ${t.id === state.selectedId ? 'selected' : ''}" data-id="${t.id}" data-family="${model ? escapeHtml(model.family) : ''}">
         <div class="card-top">
-          <span class="card-model">${escapeHtml(model ? model.name : t.model)}</span>
+          <span class="card-model">${famIcon(model ? model.family : '')}${escapeHtml(model ? model.name : t.model)}</span>
           ${badge(t)}
         </div>
         <p class="card-prompt ${prompt ? '' : 'empty'}">${prompt ? escapeHtml(prompt) : '（未填写提示词）'}</p>
         <div class="card-meta">
-          <span>${MODE_LABEL[t.mode] || t.mode} · ${escapeHtml(metaLine(t))}</span>
-          <span>${fmtTime(t.createdAt)}</span>
+          <span class="card-chips">${metaChipsHtml(t)}</span>
+          <span class="card-time">${fmtTime(t.createdAt)}</span>
         </div>
         ${runningBar}
         <div class="card-actions">${actions.join('')}</div>
@@ -298,20 +408,37 @@ function emptyHtml() {
     <div class="empty-state">
       <div class="empty-mark">
         <svg viewBox="0 0 48 48" fill="none" aria-hidden="true">
-          <rect x="4" y="4" width="40" height="40" rx="10" stroke="#27272A" stroke-width="1.5"/>
-          <path d="M17 15.5v17l14.5-8.5z" stroke="#52525B" stroke-width="1.6" stroke-linejoin="round"/>
-          <circle cx="17" cy="15.5" r="2.4" fill="#22C55E"/>
-          <circle cx="17" cy="32.5" r="1.7" fill="#3F3F46"/>
-          <circle cx="31.5" cy="24" r="1.7" fill="#3F3F46"/>
-          <path d="M36 18v12" stroke="#22C55E" stroke-width="1.6" stroke-linecap="round"/>
-          <path d="M39.5 20.4v7.2" stroke="#3F3F46" stroke-width="1.6" stroke-linecap="round"/>
+          <rect x="4" y="4" width="40" height="40" rx="10" class="mk-stroke-border" stroke-width="1.5"/>
+          <path d="M17 15.5v17l14.5-8.5z" class="mk-stroke-mute" stroke-width="1.6" stroke-linejoin="round"/>
+          <circle cx="17" cy="15.5" r="2.4" class="mk-fill-accent"/>
+          <circle cx="17" cy="32.5" r="1.7" class="mk-fill-mute"/>
+          <circle cx="31.5" cy="24" r="1.7" class="mk-fill-mute"/>
+          <path d="M36 18v12" class="mk-stroke-accent" stroke-width="1.6" stroke-linecap="round"/>
+          <path d="M39.5 20.4v7.2" class="mk-stroke-mute" stroke-width="1.6" stroke-linecap="round"/>
         </svg>
       </div>
       <h2>从第一段视频开始</h2>
       <p>新建片段，从词元跳动网关的 ${modelCount} 个视频模型中选择一个，配置提示词、素材与参数，提交后即可在这里跟踪生成进度与结果。</p>
       <button class="btn btn-primary" data-action="new">${ICONS.plus}新建片段</button>
+      ${vendorRowHtml()}
       <div class="empty-hint">TOKENDANCE.SPACE · ${modelCount} VIDEO MODELS · ${famCount} FAMILIES</div>
+      <div class="empty-trust">
+        <span>${ICONS.shield}API Key 与素材仅保存在本机</span>
+        <span>素材只在提交时发送给你自己的网关</span>
+        <span>仅监听 127.0.0.1 · 开源可审计</span>
+      </div>
     </div>`;
+}
+
+function vendorRowHtml() {
+  const seen = new Map();
+  for (const m of state.models) {
+    if (!seen.has(m.family)) seen.set(m.family, m.familyName || m.family);
+  }
+  if (!seen.size) return '';
+  const chips = [...seen.entries()].map(([key, name]) =>
+    `<span class="vendor-chip" data-family="${escapeHtml(key)}">${famIcon(key)}${escapeHtml(name)}</span>`).join('');
+  return `<div class="empty-vendors">${chips}</div>`;
 }
 
 function readonlyHtml(t) {
@@ -329,7 +456,7 @@ function readonlyHtml(t) {
       <div class="meta-grid">
         <div class="meta-row"><span class="meta-key">提示词</span><span class="meta-val">${escapeHtml(t.prompt || '（无）')}</span></div>
         <div class="meta-row"><span class="meta-key">远程任务</span><span class="meta-val mono">${escapeHtml(t.remoteId || '—')}</span></div>
-        ${t.error ? `<div class="meta-row"><span class="meta-key">错误信息</span><span class="meta-val" style="color:var(--danger)">${escapeHtml(t.error)}</span></div>` : ''}
+        ${t.error ? `<div class="meta-row"><span class="meta-key">错误信息</span><span class="meta-val" style="color:var(--bad)">${escapeHtml(t.error)}</span></div>` : ''}
       </div>
     </div>`;
 }
@@ -365,7 +492,7 @@ function progressHtml(t) {
 
 function playerHtml(t) {
   const frame = t.videoPath
-    ? `<div class="player-frame"><video src="${toFileUrl(t.videoPath)}" controls playsinline preload="metadata"></video></div>`
+    ? `<div class="player-frame"><video src="${toMediaUrl(t.videoPath)}" controls playsinline preload="metadata"></video></div>`
     : `<div class="player-downloading">
          ${t.downloadError
            ? `视频下载未完成：${escapeHtml(t.downloadError)} <button class="btn btn-ghost btn-sm" data-action="redownload" style="margin-left:8px">${ICONS.refresh}重新下载</button>`
@@ -388,10 +515,10 @@ function playerHtml(t) {
         <div class="meta-row"><span class="meta-key">远程任务</span><span class="meta-val mono">${escapeHtml(t.remoteId)}</span></div>
         <div class="meta-row"><span class="meta-key">本地文件</span><span class="meta-val mono">${t.videoPath ? escapeHtml(t.videoPath) : '—'}</span></div>
         ${urlRow}
-        <div class="meta-row"><span class="meta-key">说明</span><span class="meta-val" style="color:var(--faint);font-size:11.5px">远程地址 24 小时后失效，视频已保存到本地，可随时回看</span></div>
+        <div class="meta-row"><span class="meta-key">说明</span><span class="meta-val" style="color:var(--ink-faint);font-size:11.5px">远程地址 24 小时后失效，视频已保存到本地，可随时回看</span></div>
       </div>
       <div class="detail-actions" style="margin-top:4px">
-        ${t.videoPath ? `<button class="btn btn-ghost" data-action="reveal">${ICONS.folder}在 Finder 中显示</button>` : ''}
+        ${t.videoPath ? `<button class="btn btn-ghost" data-action="reveal">${ICONS.folder}${REVEAL_LABEL}</button>` : ''}
         ${t.videoPath ? `<button class="btn btn-ghost" data-action="open">${ICONS.external}用默认播放器打开</button>` : ''}
         <button class="btn btn-ghost" data-action="duplicate">${ICONS.copy}复制为新片段</button>
         <button class="btn btn-ghost btn-danger" data-action="remove">${ICONS.trash}删除片段</button>
@@ -400,6 +527,84 @@ function playerHtml(t) {
 }
 
 /* ---------------- 编辑器 ---------------- */
+
+/* 把 "768P ¥0.45/秒 · 2K ¥0.72/秒" 这类价格串解析成结构化价格单元。
+   无分辨率前缀的裸价（如 "¥0.9/秒"）归入第一档分辨率（通常是该模型最低价档）；
+   该档已有明确价格时则视为补充说明，不覆盖 */
+function parsePricing(pricing, resolutions) {
+  const text = (pricing || '').trim();
+  if (!text) return { unit: '', cells: [], notes: [] };
+  const unit = text.includes('/秒') ? '/秒' : (text.includes('百万') ? '/百万tokens' : '');
+  const cells = [];
+  const notes = [];
+  const firstRes = resolutions && resolutions.length ? String(resolutions[0]).toUpperCase() : '';
+  for (const seg of text.split('·')) {
+    const hit = seg.match(/(\d{3,4}[Pp]|\d+[Kk])\s*[约≈]?\s*¥?\s*(\d+(?:\.\d+)?)/);
+    if (hit) {
+      cells.push({ res: hit[1].toUpperCase(), price: Number(hit[2]) });
+      continue;
+    }
+    const bare = seg.match(/[约≈]?\s*¥\s*(\d+(?:\.\d+)?)/);
+    if (bare && firstRes && !cells.some((c) => c.res === firstRes)) {
+      cells.push({ res: firstRes, price: Number(bare[1]) });
+      continue;
+    }
+    const note = seg.replace(/[约≈]?¥?\d+(?:\.\d+)?\s*\/?\s*(秒|百万\s*tokens?)?/g, '').trim();
+    if (note) notes.push(note);
+  }
+  return { unit, cells, notes };
+}
+
+/* 价签：多档取价格区间，单档取单价，token 计费直接说明——一行解决，不再堆单元格 */
+function priceSummaryHtml(m) {
+  const { unit, cells } = parsePricing(m.pricing, m.resolutions);
+  if (!cells.length) return m.pricing ? `<span class="price-line price-token">按量计费</span>` : '';
+  if (unit !== '/秒') return `<span class="price-line">¥${cells[0].price}<small>/百万 tokens</small></span>`;
+  const prices = cells.map((c) => c.price);
+  const lo = Math.min(...prices);
+  const hi = Math.max(...prices);
+  return `<span class="price-line">${lo === hi ? `¥${lo}` : `¥${lo}–${hi}`}<small>/秒</small></span>`;
+}
+
+/* 贴纸行：最高画质(紫) + 时长(青) + 有声(粉) + 生成方式(白)——颜色即语义 */
+function tagRowHtml(m) {
+  const top = m.resolutions[m.resolutions.length - 1];
+  const tags = [
+    `<i class="tag tag-res" title="支持 ${escapeHtml(m.resolutions.join(' / '))}">${escapeHtml(top)}</i>`,
+    `<i class="tag tag-dur">${m.durationAuto ? '智能 ' : ''}${m.duration[0]}–${m.duration[1]}s</i>`,
+  ];
+  if (m.audio) tags.push('<i class="tag tag-audio">有声</i>');
+  const modes = Object.keys(MODE_CHAR).filter((k) => m.modes.includes(k)).map((k) => MODE_CHAR[k]).join('');
+  tags.push(`<i class="tag tag-mode" title="${m.modes.map((k) => MODE_LABEL[k] || k).join(' / ')}">${modes}</i>`);
+  return `<span class="tag-row">${tags.join('')}</span>`;
+}
+
+/* 费用预估：按秒计费的模型用 单价 × 时长 直接算；智能时长只报单价；token 计费提示浮动 */
+function costEstimate(t, model, patch = {}) {
+  const { unit, cells } = parsePricing(model.pricing, model.resolutions);
+  if (!cells.length) return '';
+  if (unit !== '/秒') return '按 token 计费，费用随输出浮动';
+  const resolution = String(patch.resolution ?? t.resolution).toUpperCase();
+  const duration = patch.duration !== undefined ? Number(patch.duration) : Number(t.duration);
+  const cell = cells.find((c) => c.res === resolution);
+  if (!cell) return '';
+  if (duration === -1) return `¥${cell.price}/秒 · 智能时长`;
+  if (!duration) return `¥${cell.price}/秒`;
+  return `预估 ≈ ¥${(cell.price * duration).toFixed(2)}`;
+}
+
+function updateCostEstimate(patch = {}) {
+  const el = $('#cost-estimate');
+  if (!el) return;
+  const t = getTask(state.selectedId);
+  const model = t && getModel(t.model);
+  const text = t && model ? costEstimate(t, model, patch) : '';
+  el.textContent = text;
+  el.classList.toggle('hidden', !text);
+}
+
+/* 生成方式缩写 */
+const MODE_CHAR = { text: '文', image: '图', reference: '参', edit: '编' };
 
 function modelPickerHtml(t) {
   const families = [];
@@ -412,19 +617,27 @@ function modelPickerHtml(t) {
     fam.items.push(m);
   }
   return families.map((fam) => `
-    <div class="model-family">
-      <div class="model-family-name">${escapeHtml(fam.name)} · ${fam.items.length}</div>
+    <div class="model-family" data-family="${escapeHtml(fam.key)}">
+      <div class="model-family-name">${famIcon(fam.key)}${escapeHtml(fam.name)} · ${fam.items.length}</div>
       <div class="model-grid">
-        ${fam.items.map((m) => `
-          <button type="button" class="model-card ${t.model === m.id ? 'active' : ''}" data-model="${m.id}">
+        ${fam.items.map((m) => {
+          const active = t.model === m.id;
+          return `
+          <button type="button" class="model-card ${active ? 'active' : ''}" data-model="${m.id}">
             <span class="model-card-head">
               <span class="model-card-name">${escapeHtml(m.name)}</span>
               ${m.badge ? `<span class="model-badge">${escapeHtml(m.badge)}</span>` : ''}
             </span>
-            <span class="model-card-id">${escapeHtml(m.id)}</span>
-            <span class="model-card-pricing">${escapeHtml(m.pricing || '')}</span>
-            <span class="model-card-desc">${escapeHtml(m.desc || '')}</span>
-          </button>`).join('')}
+            ${priceSummaryHtml(m)}
+            ${tagRowHtml(m)}
+            ${active ? `
+            <span class="model-card-more">
+              ${m.pricing ? `<span class="more-pricing">${escapeHtml(m.pricing)}</span>` : ''}
+              ${m.desc ? `<span class="more-desc">${escapeHtml(m.desc)}</span>` : ''}
+              <span class="more-id">${escapeHtml(m.id)}</span>
+            </span>` : ''}
+          </button>`;
+        }).join('')}
       </div>
     </div>`).join('');
 }
@@ -503,7 +716,7 @@ function mediaSlotHtml(t, key, label, kind, required, urlOnly = false) {
   const req = required ? '<span class="media-required">必填</span>' : '';
   let body;
   if (m && m.source === 'local') {
-    const thumb = kind === 'image' ? `<img class="media-thumb" src="${toFileUrl(m.path)}" alt="" />` : '';
+    const thumb = kind === 'image' ? `<img class="media-thumb" src="${toMediaUrl(m.path)}" alt="" />` : '';
     body = `
       <div class="media-filled">
         ${thumb}
@@ -537,7 +750,7 @@ function refImagesHtml(t, model) {
   const max = model.maxRefImages || Infinity;
   const items = refs.map((m, i) => {
     const inner = m.source === 'local'
-      ? `<img src="${toFileUrl(m.path)}" alt="" />`
+      ? `<img src="${toMediaUrl(m.path)}" alt="" />`
       : `<span class="ref-url-tag">${escapeHtml(m.url)}</span>`;
     return `
       <div class="ref-item" title="${escapeHtml(m.source === 'local' ? m.path : m.url)}">
@@ -568,15 +781,19 @@ function mediaSectionHtml(t, model) {
     return `
       <section class="editor-section">
         <span class="section-label">帧图片</span>
-        ${mediaSlotHtml(t, 'firstFrame', '首帧图片', 'image', true)}
-        ${mediaSlotHtml(t, 'lastFrame', '尾帧图片（可选）', 'image', false)}
+        <div class="media-grid">
+          ${mediaSlotHtml(t, 'firstFrame', '首帧图片', 'image', true)}
+          ${mediaSlotHtml(t, 'lastFrame', '尾帧图片（可选）', 'image', false)}
+        </div>
         <span class="hint">支持选择本地图片，或直接粘贴可公开访问的图片 URL；宽高比可在下方固定或设为自适应</span>
       </section>`;
   }
   if (t.mode === 'reference') {
     const extra = model.refImagesOnly ? '' : `
-      ${mediaSlotHtml(t, 'refVideo', '参考视频（仅 URL）', 'video', false, true)}
-      ${mediaSlotHtml(t, 'refAudio', '参考音频（仅 URL）', 'audio', false, true)}`;
+      <div class="media-grid">
+        ${mediaSlotHtml(t, 'refVideo', '参考视频（仅 URL）', 'video', false, true)}
+        ${mediaSlotHtml(t, 'refAudio', '参考音频（仅 URL）', 'audio', false, true)}
+      </div>`;
     return `
       <section class="editor-section">
         <span class="section-label">参考素材</span>
@@ -604,10 +821,16 @@ function editorHtml(t) {
   const failedBanner = t.status === 'failed' && t.error
     ? `<div class="form-error">${ICONS.alert}<div><strong>上次提交失败</strong><br>${escapeHtml(t.error)}</div></div>` : '';
 
+  // 任务保存的模型已不在目录中（下线或目录未同步）：提示重新选择，而不是静默兜底
+  const staleBanner = model.id !== t.model
+    ? `<div class="form-error form-warn">${ICONS.alert}<div><strong>模型已下线</strong><br>该片段使用的模型 ${escapeHtml(t.model)} 已不在当前目录中，请重新选择模型后再提交。</div></div>` : '';
+
   const promptLabel = t.mode === 'edit' ? '编辑指令' : '提示词';
   const promptPlaceholder = t.mode === 'edit'
     ? '描述希望对源视频做的修改，例如：把画面转为水彩风格，保留人物动作'
     : '描述想要的画面、动作与镜头语言，例如：女人坐在咖啡馆里抬头看向窗外，镜头推进拍到街道，暖色调';
+  const promptLen = (t.prompt || '').trim().length;
+  const cost = costEstimate(t, model);
 
   return `
     <div class="detail-inner">
@@ -619,22 +842,26 @@ function editorHtml(t) {
         ${badge(t)}
       </div>
       ${failedBanner}
+      ${staleBanner}
       <section class="editor-section">
         <span class="section-label">模型<span class="section-note sync-note"><span id="sync-status">${syncStatusText()}</span><button type="button" class="icon-btn sync-refresh ${state.modelSyncing ? 'spinning' : ''}" data-action="sync-models" title="同步模型目录" ${state.modelSyncing ? 'disabled' : ''}>${ICONS.refresh}</button></span></span>
         ${modelPickerHtml(t)}
       </section>
       ${modeSegmentedHtml(t, model)}
       <section class="editor-section">
-        <span class="section-label">${promptLabel}</span>
+        <span class="section-label">${promptLabel}<span class="section-note" id="prompt-count">${promptLen ? `${promptLen} 字` : ''}</span></span>
         <textarea class="prompt-input" id="f-prompt" placeholder="${promptPlaceholder}">${escapeHtml(t.prompt)}</textarea>
       </section>
       ${mediaSectionHtml(t, model)}
       ${paramsHtml(t, model)}
       <div class="editor-foot">
-        <span class="save-state" id="save-state">更改会自动保存</span>
+        <div class="foot-left">
+          <span class="cost-estimate ${cost ? '' : 'hidden'}" id="cost-estimate">${escapeHtml(cost)}</span>
+          <span class="save-state" id="save-state">更改会自动保存</span>
+        </div>
         <div class="foot-actions">
           <button class="btn btn-ghost btn-danger" data-action="remove">${ICONS.trash}删除</button>
-          <button class="btn btn-primary" data-action="submit">${ICONS.play}开始生成</button>
+          <button class="btn btn-primary" data-action="submit" title="开始生成（${MOD_HINT}⏎）">${ICONS.play}开始生成</button>
         </div>
       </div>
     </div>`;
@@ -725,6 +952,11 @@ async function duplicateTask(id) {
 }
 
 async function removeTask(id) {
+  const t = getTask(id);
+  if (t && t.videoPath) {
+    const okDel = window.confirm('删除该片段会同时删除已下载到本地的视频文件，且不可恢复。确定删除？');
+    if (!okDel) return;
+  }
   try {
     await studio.removeTask(id);
     state.tasks = state.tasks.filter((x) => x.id !== id);
@@ -835,8 +1067,11 @@ async function handleDetailAction(t, action, btn) {
     case 'redownload':
       if (t) {
         try {
-          await studio.redownloadTask(t.id);
-          showToast('已开始重新下载', 'success');
+          const updated = await studio.redownloadTask(t.id);
+          mergeTask(updated);
+          renderDetail(true);
+          if (updated && updated.downloadError) showToast(updated.downloadError, 'error');
+          else if (updated && updated.videoPath) showToast('视频已重新下载到本地', 'success');
         } catch (err) {
           showToast(err.message, 'error');
         }
@@ -885,6 +1120,7 @@ function bindDetailEvents() {
       const num = $('#f-duration');
       if (field === 'duration' && num) num.value = Number(chip.dataset.value) === -1 ? '' : chip.dataset.value;
       scheduleSave(t, { [field]: value });
+      updateCostEstimate({ [field]: value });
       await flushSave(t);
       return;
     }
@@ -903,8 +1139,12 @@ function bindDetailEvents() {
     const pickBtn = e.target.closest('[data-media-pick]');
     if (pickBtn && t && editable(t)) {
       const key = pickBtn.dataset.mediaPick;
-      const file = await studio.pickMedia(pickBtn.dataset.kind);
-      if (file) await patchMedia(t, key, { source: 'local', path: file.path, name: file.name });
+      try {
+        const file = await studio.pickMedia(pickBtn.dataset.kind);
+        if (file) await patchMedia(t, key, { source: 'local', path: file.path, name: file.name });
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
       return;
     }
 
@@ -916,9 +1156,13 @@ function bindDetailEvents() {
 
     const refAddBtn = e.target.closest('[data-ref-add="local"]');
     if (refAddBtn && t && editable(t)) {
-      const file = await studio.pickMedia('image');
-      if (file) {
-        await patchRefImages(t, (refs) => [...refs, { source: 'local', path: file.path, name: file.name }]);
+      try {
+        const file = await studio.pickMedia('image');
+        if (file) {
+          await patchRefImages(t, (refs) => [...refs, { source: 'local', path: file.path, name: file.name }]);
+        }
+      } catch (err) {
+        showToast(err.message, 'error');
       }
       return;
     }
@@ -937,13 +1181,21 @@ function bindDetailEvents() {
   box.addEventListener('input', (e) => {
     const t = getTask(state.selectedId);
     if (!t || !editable(t)) return;
-    if (e.target.id === 'f-prompt') scheduleSave(t, { prompt: e.target.value });
-    else if (e.target.id === 'f-duration') {
+    if (e.target.id === 'f-prompt') {
+      scheduleSave(t, { prompt: e.target.value });
+      const counter = $('#prompt-count');
+      if (counter) {
+        const n = e.target.value.trim().length;
+        counter.textContent = n ? `${n} 字` : '';
+      }
+    } else if (e.target.id === 'f-duration') {
       if (e.target.value === '') {
         const m = getModel(t.model);
         if (m && m.durationAuto) scheduleSave(t, { duration: -1 });
+        updateCostEstimate({ duration: -1 });
       } else {
         scheduleSave(t, { duration: e.target.value });
+        updateCostEstimate({ duration: Number(e.target.value) });
       }
     }
   });
@@ -978,6 +1230,16 @@ function bindDetailEvents() {
 
 /* ---------------- 设置 ---------------- */
 
+let oauthBusy = false;
+
+function setOauthUI(busy) {
+  oauthBusy = busy;
+  const btn = $('#btn-oauth-connect');
+  btn.disabled = false; // 授权中再点一次 = 取消
+  btn.classList.toggle('oauth-pending', busy);
+  $('#oauth-btn-text').textContent = busy ? '等待浏览器授权…（点击取消）' : '一键授权，自动填入 Key';
+}
+
 async function openSettings() {
   const s = state.settings || await studio.getSettings();
   $('#set-endpoint').value = s.endpoint || '';
@@ -990,7 +1252,16 @@ async function openSettings() {
 }
 
 function closeSettings() {
+  if (oauthBusy) {
+    studio.cancelConnect().catch(() => {});
+    setOauthUI(false);
+  }
   $('#settings-modal').classList.add('hidden');
+  // 首启流程：设置关闭后接力新手引导
+  if (tourPending) {
+    tourPending = false;
+    if (!tourSeen()) startTour();
+  }
 }
 
 function bindSettings() {
@@ -1004,6 +1275,25 @@ function bindSettings() {
     const show = input.type === 'password';
     input.type = show ? 'text' : 'password';
     $('#set-toggle-key').textContent = show ? '隐藏' : '显示';
+  });
+  $('#btn-oauth-connect').addEventListener('click', async () => {
+    if (oauthBusy) {
+      try { await studio.cancelConnect(); } catch { /* 忽略 */ }
+      setOauthUI(false);
+      return;
+    }
+    setOauthUI(true);
+    try {
+      await studio.connectTokenDance();
+      state.settings = await studio.getSettings();
+      $('#set-apikey').value = state.settings.apiKey || '';
+      showToast('授权成功，API Key 已自动填入并保存', 'success');
+      refreshConnStatus();
+    } catch (err) {
+      showToast(err.message, 'error');
+    } finally {
+      setOauthUI(false);
+    }
   });
   $('#btn-test-conn').addEventListener('click', async () => {
     const result = $('#test-result');
@@ -1029,10 +1319,35 @@ function bindSettings() {
       });
       closeSettings();
       showToast('设置已保存', 'success');
+      refreshConnStatus();
     } catch (err) {
       showToast(err.message, 'error');
     }
   });
+}
+
+/* ---------------- 网关状态灯 ---------------- */
+
+async function refreshConnStatus() {
+  const btn = $('#btn-conn');
+  if (!btn) return;
+  const set = (cls, label, tip) => {
+    btn.className = `conn-status ${cls}`;
+    btn.querySelector('span').textContent = label;
+    btn.title = tip;
+  };
+  if (!state.settings || !state.settings.apiKey) {
+    set('nokey', '未配置', '尚未配置 API Key，点击打开设置');
+    return;
+  }
+  set('testing', '检测中', '正在检测网关连接…');
+  try {
+    const res = await studio.testSettings();
+    if (res && res.ok) set('ok', '已连接', `${res.message} · 点击打开设置`);
+    else set('bad', '连不通', `${(res && res.message) || '连接失败'} · 点击打开设置`);
+  } catch (err) {
+    set('bad', '连不通', `${err.message} · 点击打开设置`);
+  }
 }
 
 /* ---------------- 全局事件 ---------------- */
@@ -1040,6 +1355,20 @@ function bindSettings() {
 function bindGlobal() {
   $('#btn-new').addEventListener('click', newTask);
   $('#btn-submit-all').addEventListener('click', submitAll);
+  $('#btn-theme').addEventListener('click', cycleTheme);
+  $('#btn-conn').addEventListener('click', openSettings);
+  $('#btn-help').addEventListener('click', startTour);
+
+  // 快捷键提示写进按钮 tooltip
+  $('#btn-new').title = `新建片段（${MOD_HINT}N）`;
+  $('#btn-settings').title = `设置（${MOD_HINT},）`;
+
+  $('#queue-filters').addEventListener('click', (e) => {
+    const chip = e.target.closest('[data-filter]');
+    if (!chip || chip.dataset.filter === state.filter) return;
+    state.filter = chip.dataset.filter;
+    renderSidebar();
+  });
 
   $('#task-list').addEventListener('click', async (e) => {
     const actionBtn = e.target.closest('[data-action]');
@@ -1061,7 +1390,26 @@ function bindGlobal() {
   });
 
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') closeSettings();
+    if (e.key === 'Escape') {
+      if (tourRoot) { endTour(); return; }
+      closeSettings();
+      return;
+    }
+    if (!(e.metaKey || e.ctrlKey)) return;
+    const key = e.key.toLowerCase();
+    if (key === 'n') {
+      e.preventDefault();
+      newTask();
+    } else if (key === 'enter') {
+      const t = getTask(state.selectedId);
+      if (t && (t.status === 'draft' || t.status === 'failed')) {
+        e.preventDefault();
+        submitOne(t.id);
+      }
+    } else if (key === ',') {
+      e.preventDefault();
+      openSettings();
+    }
   });
 
   setInterval(() => {
@@ -1070,9 +1418,138 @@ function bindGlobal() {
   }, 1000);
 }
 
+/* ---------------- 新手引导（首启遮罩导览） ---------------- */
+
+const TOUR_KEY = 'td-onboarded-v1';
+const TOUR_STEPS = [
+  {
+    target: '#btn-conn', side: 'bottom',
+    title: '连接词元跳动网关',
+    text: '第一次使用先完成连接：点这里拉起浏览器授权页，确认后平台把授权码回传到本机临时端口（127.0.0.1）换出 API Key——只经过你的浏览器与本机，不经过任何第三方。',
+  },
+  {
+    target: '#btn-new', side: 'bottom',
+    title: '新建片段',
+    text: '每段视频是一个独立片段。可以一次排布多段，各自的模型、时长、画质、画面比例完全独立，互不干扰。',
+  },
+  {
+    target: '#detail', side: 'center',
+    title: '配置与提交',
+    text: '在编辑器里选择模型与生成方式、填写提示词、调整参数；底部会实时预估费用，确认后点「开始生成」。',
+  },
+  {
+    target: '.sidebar', side: 'right',
+    title: '任务队列',
+    text: '提交后在这里跟踪排队与生成进度，可按状态筛选。完成后视频自动下载到本机永久保留，点开卡片即可播放或导出。',
+  },
+];
+
+let tourRoot = null;
+let tourStep = 0;
+let tourPending = false;
+
+function tourSeen() {
+  try { return !!localStorage.getItem(TOUR_KEY); } catch { return true; }
+}
+
+function markTourSeen() {
+  try { localStorage.setItem(TOUR_KEY, '1'); } catch { /* 忽略 */ }
+}
+
+function endTour() {
+  if (tourRoot) tourRoot.remove();
+  tourRoot = null;
+  window.removeEventListener('resize', layoutTour);
+  markTourSeen();
+}
+
+function layoutTour() {
+  if (!tourRoot) return;
+  const step = TOUR_STEPS[tourStep];
+  const el = document.querySelector(step.target);
+  const spot = $('.tour-spot', tourRoot);
+  const card = $('.tour-card', tourRoot);
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  const cardW = Math.min(330, vw - 32);
+  card.style.width = `${cardW}px`;
+
+  if (!el) {
+    spot.style.cssText += ';opacity:0';
+    card.style.left = `${(vw - cardW) / 2}px`;
+    card.style.top = `${vh * 0.3}px`;
+    return;
+  }
+  const r = el.getBoundingClientRect();
+  const pad = 8;
+  spot.style.opacity = '1';
+  spot.style.left = `${r.left - pad}px`;
+  spot.style.top = `${r.top - pad}px`;
+  spot.style.width = `${r.width + pad * 2}px`;
+  spot.style.height = `${r.height + pad * 2}px`;
+
+  const cardH = card.offsetHeight || 170;
+  let left;
+  let top;
+  if (step.side === 'right') {
+    left = Math.min(r.right + 18, vw - cardW - 16);
+    top = Math.min(Math.max(r.top + r.height / 2 - cardH / 2, 16), vh - cardH - 16);
+  } else if (step.side === 'center') {
+    left = Math.min(Math.max(r.left + r.width / 2 - cardW / 2, 16), vw - cardW - 16);
+    top = Math.min(Math.max(r.top + r.height / 2 - cardH / 2, 16), vh - cardH - 16);
+  } else {
+    // bottom：优先目标下方，放不下则放上方
+    left = Math.min(Math.max(r.left + r.width / 2 - cardW / 2, 16), vw - cardW - 16);
+    top = r.bottom + 14 + cardH > vh ? Math.max(r.top - cardH - 14, 16) : r.bottom + 14;
+  }
+  card.style.left = `${left}px`;
+  card.style.top = `${top}px`;
+}
+
+function renderTourStep() {
+  if (!tourRoot) return;
+  const step = TOUR_STEPS[tourStep];
+  const last = tourStep === TOUR_STEPS.length - 1;
+  $('.tour-step', tourRoot).textContent = `${tourStep + 1} / ${TOUR_STEPS.length}`;
+  $('.tour-title', tourRoot).textContent = step.title;
+  $('.tour-text', tourRoot).textContent = step.text;
+  $('.tour-prev', tourRoot).classList.toggle('hidden', tourStep === 0);
+  $('.tour-next', tourRoot).textContent = last ? '开始使用' : '下一步';
+  layoutTour();
+}
+
+function startTour() {
+  if (tourRoot) return;
+  tourStep = 0;
+  tourRoot = document.createElement('div');
+  tourRoot.className = 'tour-root';
+  tourRoot.innerHTML = `
+    <div class="tour-spot" aria-hidden="true"></div>
+    <div class="tour-card" role="dialog" aria-label="新手引导">
+      <span class="tour-step"></span>
+      <h3 class="tour-title"></h3>
+      <p class="tour-text"></p>
+      <div class="tour-actions">
+        <button type="button" class="btn btn-ghost btn-sm tour-skip">跳过</button>
+        <button type="button" class="btn btn-ghost btn-sm tour-prev">上一步</button>
+        <button type="button" class="btn btn-primary btn-sm tour-next">下一步</button>
+      </div>
+    </div>`;
+  document.body.appendChild(tourRoot);
+  $('.tour-skip', tourRoot).addEventListener('click', endTour);
+  $('.tour-prev', tourRoot).addEventListener('click', () => { tourStep = Math.max(0, tourStep - 1); renderTourStep(); });
+  $('.tour-next', tourRoot).addEventListener('click', () => {
+    if (tourStep >= TOUR_STEPS.length - 1) endTour();
+    else { tourStep += 1; renderTourStep(); }
+  });
+  window.addEventListener('resize', layoutTour);
+  renderTourStep();
+}
+
 /* ---------------- 启动 ---------------- */
 
 async function boot() {
+  applyTheme();
   bindGlobal();
   bindSettings();
   bindDetailEvents();
@@ -1094,10 +1571,19 @@ async function boot() {
   // 模型目录在线同步：先用内置/缓存目录完成首屏渲染，网络同步异步补齐
   refreshModels();
 
+  // 网关状态灯：不阻塞首屏，后台检测
+  refreshConnStatus();
+
   // 首次启动（未配置 API Key）时引导完成网关设置
   if (state.settings && !state.settings.apiKey) {
     await openSettings();
-    showToast('首次使用请先在设置中填入 API Key', 'error');
+    showToast('首次使用请先完成网关授权或填入 API Key');
+  }
+
+  // 新手引导：首次启动时演示主流程；若设置弹窗已自动打开，等它关闭后再开始
+  if (!tourSeen()) {
+    if ($('#settings-modal').classList.contains('hidden')) startTour();
+    else tourPending = true;
   }
 
   studio.onTasksChanged((list) => {

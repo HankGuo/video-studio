@@ -358,4 +358,11 @@ function getModel(id, remoteModels) {
   return all.find((m) => m.id === id) || MODELS.find((m) => m.id === DEFAULT_MODEL);
 }
 
-module.exports = { MODELS, FAMILIES, DEFAULT_MODEL, PROTOCOL_MAP, listModels, getModel, mergeRemote, setRemoteCache };
+// 严格查找：不做默认兜底。提交 / 轮询时必须用精确匹配，
+// 否则目录下线后的旧任务会被静默按错误协议提交
+function findModel(id) {
+  const all = remoteCache ? mergeRemote(remoteCache) : MODELS;
+  return all.find((m) => m.id === id) || null;
+}
+
+module.exports = { MODELS, FAMILIES, DEFAULT_MODEL, PROTOCOL_MAP, listModels, getModel, findModel, mergeRemote, setRemoteCache };
