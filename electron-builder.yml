@@ -4,6 +4,10 @@ appId: space.tokendance.videostudio
 productName: TokenDance 视频接入助手
 copyright: MIT
 
+# 产物文件名固定为 ASCII。productName 是中文，默认产物名会带中文和空格，
+# 在 Release 下载 URL 里会被百分号编码成一长串，易碎且无法肉眼辨认，故此处显式覆盖。
+artifactName: "VideoStudio-${version}-${os}-${arch}.${ext}"
+
 # 仅打包时覆盖入口为 Electron 壳，仓库 package.json 的 main 保持 server.js 不变
 extraMetadata:
   main: desktop/main.js
@@ -37,6 +41,7 @@ win:
       arch: [x64]
 
 nsis:
+  artifactName: "VideoStudio-${version}-win-setup.${ext}"   # 区分安装向导版与绿色 zip
   oneClick: false           # 安装向导版（可选安装目录），比一键安装更适合小白
   perMachine: false
   allowToChangeInstallationDirectory: true
