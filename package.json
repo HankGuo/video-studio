@@ -1,6 +1,6 @@
 {
   "name": "video-studio",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "TokenDance 视频 Playground - 词元跳动全量视频模型的本地接入工作台",
   "main": "server.js",
   "license": "MIT",

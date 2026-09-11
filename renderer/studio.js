@@ -85,6 +85,9 @@ window.studio = {
   saveSettings: (patch) => api('/api/settings', { method: 'PUT', body: JSON.stringify(patch) }),
   testSettings: (draft) => api('/api/settings/test', { method: 'POST', body: JSON.stringify(draft || {}) }),
 
+  getAppInfo: () => api('/api/app/info'),
+  checkUpdate: () => api('/api/update/check'),
+
   listModels: () => api('/api/models'),
   syncModels: () => api('/api/models/sync', { method: 'POST', body: '{}' }),
   connectTokenDance: () => api('/api/oauth/connect', { method: 'POST', body: '{}' }),

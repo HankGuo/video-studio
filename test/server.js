@@ -26,7 +26,10 @@ function check(name, cond, extra = '') {
 }
 
 async function main() {
-  const { server, url } = await createStudio({ port: 0, openBrowser: false });
+  // server / url 用 let：末尾要重启一次实例验证落盘数据的迁移行为
+  const boot = await createStudio({ port: 0, openBrowser: false });
+  let server = boot.server;
+  let url = boot.url;
   console.log(`\n测试服务器：${url}（数据目录 ${process.env.VIDEO_STUDIO_USER_DATA}）\n`);
 
   const get = async (p, headers) => {
@@ -83,6 +86,31 @@ async function main() {
   const badPatch = await api(`/api/tasks/${id}`, 'PATCH', { duration: 9999 });
   check('越界参数被收敛', badPatch.ok && badPatch.data.duration <= 15);
 
+  // 「先选模型再出表单」：新建的草稿不带模型，是一张空壳 ——
+  // mode / duration / resolution / ratio 全部留空，选定模型后才由 update() 收敛出来
+  const blank = await api('/api/tasks', 'POST', {});
+  check('创建未选模型的空壳草稿',
+    blank.ok && blank.data.model === '' && blank.data.mode === ''
+    && blank.data.duration === 0 && blank.data.status === 'draft');
+  const blankId = blank.data.id;
+  const picked = await api(`/api/tasks/${blankId}`, 'PATCH', { model: 'minimax-h3' });
+  check('空壳草稿选定模型后参数被收敛',
+    picked.ok && picked.data.model === 'minimax-h3' && !!picked.data.mode
+    && picked.data.duration > 0 && !!picked.data.resolution && !!picked.data.ratio);
+
+  // 选择目录里没有的模型必须报错。曾经这里是静默兜底成默认模型 ——
+  // 用户选了 A、任务却按 B 生成并按 B 计费，界面上完全看不出来
+  const badModel = await api(`/api/tasks/${blankId}`, 'PATCH', { model: 'no-such-model-xyz' });
+  check('选择目录外的模型被拒绝', !badModel.ok && badModel.error.includes('不在当前模型目录中'));
+  check('被拒绝的模型变更没有落库',
+    (await api('/api/tasks')).data.find((t) => t.id === blankId).model === 'minimax-h3');
+
+  const blank2 = await api('/api/tasks', 'POST', {});
+  const blankSubmit = await api(`/api/tasks/${blank2.data.id}/submit`, 'POST');
+  check('未选模型的草稿提交被拦截',
+    blankSubmit.ok && blankSubmit.data.status === 'failed'
+    && blankSubmit.data.error.includes('请先为该片段选择模型'));
+
   // 上传 + 媒体流
   const png = Buffer.from('89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c626001000000ffff03000006000557bfabd40000000049454e44ae426082', 'hex');
   const up = await fetch(url + '/api/upload?kind=image', {
@@ -127,7 +155,28 @@ async function main() {
   const submitted = await api(`/api/tasks/${id}/submit`, 'POST');
   check('提交流程可走通（无 Key 时失败入列）', submitted.ok && (submitted.data.status === 'queued' || submitted.data.status === 'failed'));
 
-  server.close();
+  // 重启一次实例：空壳草稿必须原样存活。启动时的 migrateTask 若把它补成默认模型，
+  // 用户下次打开就会发现「还没选模型」的片段自己长出了整张表单。
+  // 先按真实退出路径落盘（SIGINT 走的就是 tasks.stop + tasks.flush），
+  // 直接 close 会漏掉还在 300ms 防抖窗口里的改动，那是测试写法的问题，不是产品行为
+  boot.tasks.stop();
+  boot.tasks.flush();
+  await new Promise((resolve) => server.close(resolve));
+  const reboot = await createStudio({ port: 0, openBrowser: false });
+  server = reboot.server;
+  url = reboot.url;
+  // 用 blank2（全程没被选过模型）验证：blankId 在上面的用例里已经选过模型了，
+  // 拿它断言等于什么也没测
+  const all = (await api('/api/tasks')).data;
+  const stillBlank = all.find((t) => t.id === blank2.data.id);
+  const pickedKept = all.find((t) => t.id === blankId);
+  check('重启后空壳草稿仍未被预置模型', !!stillBlank && stillBlank.model === '',
+    `实际读到 ${JSON.stringify(stillBlank && { id: stillBlank.id, model: stillBlank.model })}`);
+  check('重启后已选定模型的草稿保留其模型', !!pickedKept && pickedKept.model === 'minimax-h3');
+
+  reboot.tasks.stop();
+  reboot.tasks.flush();
+  await new Promise((resolve) => server.close(resolve));
   console.log(`\n结果：${passed} 通过，${failed} 失败\n`);
   process.exit(failed ? 1 : 0);
 }

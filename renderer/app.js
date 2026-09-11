@@ -10,7 +10,6 @@ const STATUS_LABEL = {
   succeeded: '已完成', failed: '失败', cancelled: '已取消', expired: '已过期',
 };
 const DEFAULT_MODEL = 'minimax-h3';
-const LAST_MODEL_KEY = 'td-last-model';
 const QUICK_DURATIONS = [3, 4, 5, 6, 8, 10, 12, 15, 20, 25, 30];
 
 /* ---------------- 主题（夜间 / 日间 / 跟随系统） ---------------- */
@@ -90,11 +89,23 @@ const state = {
   models: [],
   modelSync: { source: 'builtin', syncedAt: 0 },
   modelSyncing: false,
+  appInfo: null,           // { version, isElectron } — 启动时由 /api/app/info 填入
+  updateCheckBusy: false,  // 防重入：检查更新中时按钮禁用
+  // 创作台当前工单的 id（可为 null）。只表示「编辑器里正在配的那一单」，
+  // 提交后即清空，与作品墙上被选中的卡片无关（那是 modalId）
   selectedId: null,
   settings: null,
   detailSig: '',
   saveStateTimer: null,
   filter: 'all',
+  tab: 'studio',
+  modalId: null,
+  wallSig: null,
+  modalSig: '',
+
+  // 模型选择器的展开态与搜索词：纯视图状态，不进 tasks.json，也不该被任务切换重置
+  modelPickerOpen: false,
+  modelQuery: '',
 };
 
 // 快捷键提示里的修饰键符号
@@ -155,8 +166,15 @@ function getTask(id) {
   return state.tasks.find((t) => t.id === id) || null;
 }
 
+/* 目录里精确查找：查不到就是查不到。
+   判断「这个任务用了哪个模型」必须用它 —— getModel 会静默兜底到 DEFAULT_MODEL，
+   用在那里会把「还没选模型」显示成一个具体的模型，用户看到的是假信息 */
+function findModel(id) {
+  return state.models.find((m) => m.id === id) || null;
+}
+
 function getModel(id) {
-  return state.models.find((m) => m.id === id) || state.models.find((m) => m.id === DEFAULT_MODEL) || null;
+  return findModel(id) || findModel(DEFAULT_MODEL);
 }
 
 // 「在文件夹中显示」按钮文案按平台区分
@@ -174,7 +192,9 @@ function mergeTask(updated) {
   const i = state.tasks.findIndex((x) => x.id === updated.id);
   if (i >= 0) state.tasks[i] = updated;
   else state.tasks.unshift(updated);
-  renderSidebar();
+  // 只刷新作品墙：mergeTask 在每次打字防抖落盘后都会被调用，
+  // 一旦在这里重绘创作台，输入框会被重建 —— 失焦、光标跳首、中文输入法组合中断
+  renderWall();
 }
 
 function ratioLabel(r) {
@@ -187,12 +207,12 @@ function durationLabel(d) {
 
 /* ---------------- 模型目录同步 ---------------- */
 
+// 不显示模型数量：目录每次启动都会跟网关同步，写死数字会随新模型上架而过时
 function syncStatusText() {
-  const n = state.models.length;
   const s = state.modelSync;
-  if (s.source === 'remote' && s.syncedAt) return `${n} MODELS · 已同步 ${fmtClock(s.syncedAt)}`;
-  if (s.source === 'cache') return `${n} MODELS · 本地缓存`;
-  return `${n} MODELS · 内置目录`;
+  if (s.source === 'remote' && s.syncedAt) return `模型目录 · 已同步 ${fmtClock(s.syncedAt)}`;
+  if (s.source === 'cache') return `模型目录 · 本地缓存`;
+  return `模型目录 · 内置`;
 }
 
 // 只更新状态行与刷新按钮，避免为文案变化重渲染整个编辑器
@@ -275,32 +295,44 @@ function scheduleSave(t, patch) {
   saveDebounce = setTimeout(() => flushSave(t), 400);
 }
 
-/* ---------------- 侧栏 ---------------- */
+/* ---------------- 作品墙 ---------------- */
 
-const QUEUE_FILTERS = [
+const WALL_FILTERS = [
   { key: 'all', label: '全部' },
-  { key: 'draft', label: '草稿' },
   { key: 'active', label: '进行中' },
-  { key: 'succeeded', label: '完成' },
-  { key: 'failed', label: '失败' },
+  { key: 'succeeded', label: '已完成' },
+  { key: 'failed', label: '未成功' },
 ];
 const ACTIVE_STATUSES = ['submitting', 'queued', 'running'];
 
-function taskInGroup(t, key) {
+// 草稿属于创作台，不属于作品：作品墙上只会出现已经提交过的任务
+const isWork = (t) => t.status !== 'draft';
+
+function wallInGroup(t, key) {
   switch (key) {
-    case 'draft': return t.status === 'draft';
     case 'active': return ACTIVE_STATUSES.includes(t.status);
     case 'succeeded': return t.status === 'succeeded';
-    case 'failed': return t.status === 'failed';
+    case 'failed': return t.status === 'failed' || t.status === 'cancelled' || t.status === 'expired';
     default: return true;
   }
 }
 
-function renderQueueFilters() {
-  const box = $('#queue-filters');
+function wallTasks() {
+  return state.tasks.filter(isWork);
+}
+
+/* 单卡签名：决定「这一张卡要不要重建」。
+   刻意不含 updatedAt —— 每轮轮询都会改它，含进去等于没有签名 */
+function cardSig(t) {
+  return [t.id, t.status, t.mode, t.model, t.duration, t.resolution, t.ratio, t.audio,
+    t.prompt, t.videoPath, t.downloadError, t.error, t.createdAt, t.submittedAt].join('\u0001');
+}
+
+function renderWallFilters(works) {
+  const box = $('#wall-filters');
   if (!box) return;
-  box.innerHTML = QUEUE_FILTERS.map((f) => {
-    const n = state.tasks.filter((t) => taskInGroup(t, f.key)).length;
+  box.innerHTML = WALL_FILTERS.map((f) => {
+    const n = works.filter((t) => wallInGroup(t, f.key)).length;
     return `<button type="button" class="qchip ${state.filter === f.key ? 'active' : ''}" data-filter="${f.key}">${f.label}<span class="qchip-n">${n}</span></button>`;
   }).join('');
 }
@@ -317,93 +349,248 @@ function metaLine(t) {
   return parts.join(' · ');
 }
 
-/* 侧栏卡片的参数用彩色小签呈现，替代一长串点分文字 */
+/* 卡片参数用彩色小签呈现，替代一长串点分文字 */
 function metaChipsHtml(t) {
+  // 还没选模型的草稿没有任何参数可展示，给个占位，别渲染一排空 chip
+  if (!t.model) return '<span class="meta-chip">待选择模型</span>';
   const parts = [MODE_LABEL[t.mode] || t.mode, durationLabel(t.duration), t.resolution];
   if (t.ratio) parts.push(ratioLabel(t.ratio));
   if (t.audio) parts.push('有声');
   return parts.map((p) => `<span class="meta-chip">${escapeHtml(p)}</span>`).join('');
 }
 
-function renderSidebar() {
-  const list = $('#task-list');
-  const drafts = state.tasks.filter((t) => t.status === 'draft').length;
-
-  $('#queue-count').textContent = String(state.tasks.length);
-  $('#btn-submit-all').classList.toggle('hidden', drafts === 0);
-  $('#draft-count').textContent = drafts ? `（${drafts}）` : '';
-  renderQueueFilters();
-
-  if (!state.tasks.length) {
-    list.innerHTML = '';
-    return;
+/* 封面。已完成且有本地文件的直接上 <video> 抽首帧：
+   preload="metadata" 只拉 moov 与首个 GOP，#t=0.1 让解码器直接定位到非零时刻，
+   避开最常见的黑场/渐入开场。实测 Chromium 下 readyState 到 4、videoWidth 正常，
+   CSP 的 media-src 'self' 允许同源 /media，不需要额外放行。 */
+function coverHtml(t) {
+  const model = findModel(t.model);
+  if (t.status === 'succeeded' && t.videoPath) {
+    return `<video src="${toMediaUrl(t.videoPath)}#t=0.1" preload="metadata" muted playsinline></video>`;
   }
-
-  const visible = state.tasks.filter((t) => taskInGroup(t, state.filter));
-  if (!visible.length) {
-    const label = (QUEUE_FILTERS.find((f) => f.key === state.filter) || {}).label || '';
-    list.innerHTML = `<div class="queue-empty">没有「${label}」状态的片段</div>`;
-    return;
+  if (ACTIVE_STATUSES.includes(t.status)) {
+    // 网关只回 status、不给百分比，所以这里只能是不定量流光 + 已用时长，做不出真实进度条
+    return `<div class="cover-skeleton" aria-hidden="true"></div>
+      <div class="running-bar"><i></i></div>
+      <span class="cover-elapsed" data-since="${t.submittedAt || t.updatedAt}">${fmtElapsed(t.submittedAt || t.updatedAt)}</span>`;
   }
-
-  list.innerHTML = visible.map((t) => {
-    const prompt = (t.prompt || '').trim();
-    const model = getModel(t.model);
-    const actions = [];
-    if (t.status === 'draft' || t.status === 'failed') {
-      actions.push(`<button class="icon-btn" data-action="submit" title="开始生成">${ICONS.play}</button>`);
-    }
-    actions.push(`<button class="icon-btn" data-action="duplicate" title="复制为新片段">${ICONS.copy}</button>`);
-    actions.push(`<button class="icon-btn" data-action="remove" title="删除">${ICONS.trash}</button>`);
-    const runningBar = (t.status === 'running' || t.status === 'queued' || t.status === 'submitting')
-      ? '<div class="running-bar"><i></i></div>' : '';
-    return `
-      <article class="task-card ${t.id === state.selectedId ? 'selected' : ''}" data-id="${t.id}" data-family="${model ? escapeHtml(model.family) : ''}">
-        <div class="card-top">
-          <span class="card-model">${famIcon(model ? model.family : '')}${escapeHtml(model ? model.name : t.model)}</span>
-          ${badge(t)}
-        </div>
-        <p class="card-prompt ${prompt ? '' : 'empty'}">${prompt ? escapeHtml(prompt) : '（未填写提示词）'}</p>
-        <div class="card-meta">
-          <span class="card-chips">${metaChipsHtml(t)}</span>
-          <span class="card-time">${fmtTime(t.createdAt)}</span>
-        </div>
-        ${runningBar}
-        <div class="card-actions">${actions.join('')}</div>
-      </article>`;
-  }).join('');
+  if (t.status === 'succeeded') {
+    return `<div class="cover-ph">${ICONS.refresh}<span>${t.downloadError ? '下载未完成' : '正在下载'}</span></div>`;
+  }
+  return `<div class="cover-ph">${ICONS.alert}<span>${escapeHtml(STATUS_LABEL[t.status] || t.status)}</span></div>`;
 }
 
-/* ---------------- 详情 ---------------- */
+function workCardHtml(t) {
+  const prompt = (t.prompt || '').trim();
+  const model = findModel(t.model);
+  const durTag = (t.status === 'succeeded' && t.videoPath)
+    ? `<span class="cover-tag">${escapeHtml(durationLabel(t.duration))}</span>` : '';
+  return `
+    <article class="work-card" data-id="${escapeHtml(t.id)}" data-family="${model ? escapeHtml(model.family) : ''}">
+      <button type="button" class="work-cover" data-action="open-work" aria-label="播放这个片段">
+        ${coverHtml(t)}
+        ${durTag}
+      </button>
+      <div class="work-body">
+        <div class="work-top">
+          <span class="work-model">${famIcon(model ? model.family : '')}${escapeHtml(model ? model.name : (t.model || '未选模型'))}</span>
+          ${badge(t)}
+        </div>
+        <p class="work-prompt ${prompt ? '' : 'empty'}">${prompt ? escapeHtml(prompt) : '（未填写提示词）'}</p>
+        <div class="work-meta">${metaChipsHtml(t)}</div>
+      </div>
+      <div class="work-foot">
+        <span class="card-time">${fmtTime(t.createdAt)}</span>
+        <span class="work-actions">
+          <button class="icon-btn" data-action="duplicate" title="复制为新片段">${ICONS.copy}</button>
+          <button class="icon-btn" data-action="remove" title="删除">${ICONS.trash}</button>
+        </span>
+      </div>
+    </article>`;
+}
 
-function renderDetail(force = false) {
-  const t = getTask(state.selectedId);
-  const sig = t
-    ? [t.id, t.status, t.mode, t.model, t.error, t.downloadError, t.videoPath, t.videoUrl, t.audio].join('|')
-    : 'empty';
-  if (!force && sig === state.detailSig) return;
-  state.detailSig = sig;
+function htmlToEl(html) {
+  const box = document.createElement('div');
+  box.innerHTML = html;
+  return box.firstElementChild;
+}
 
-  const box = $('#detail');
-  if (!t) {
-    box.innerHTML = emptyHtml();
+/* 逐卡比对而不是整体重写：生成期间每轮轮询都会推一次任务列表，
+   整体重写会连带把 <video> 节点销毁重建 —— 表现为封面闪烁 + 重新拉一遍 Range 请求。
+   只有签名变了的卡才替换，其余节点原地不动。 */
+function syncGrid(grid, visible) {
+  const keep = new Set();
+  visible.forEach((t, i) => {
+    keep.add(t.id);
+    const sig = cardSig(t);
+    let card = grid.querySelector(`.work-card[data-id="${CSS.escape(t.id)}"]`);
+    if (!card) {
+      card = htmlToEl(workCardHtml(t));
+      card.dataset.sig = sig;
+    } else if (card.dataset.sig !== sig) {
+      const next = htmlToEl(workCardHtml(t));
+      next.dataset.sig = sig;
+      card.replaceWith(next);
+      card = next;
+    }
+    if (grid.children[i] !== card) grid.insertBefore(card, grid.children[i] || null);
+  });
+  [...grid.children].forEach((c) => { if (!keep.has(c.dataset.id)) c.remove(); });
+}
+
+/* 作品墙的骨架只建一次，之后只更新里面的内容 —— 整体重写会把 <video> 一起带走 */
+let wallMounted = false;
+
+function mountWall() {
+  const wall = $('#panel-wall');
+  if (!wall || wallMounted) return;
+  wallMounted = true;
+  wall.innerHTML = `
+    <div class="wall-head">
+      <div class="wall-head-inner">
+        <div class="wall-title">作品墙<span class="wall-sub" id="wall-sub"></span></div>
+        <div id="wall-filters" class="wall-filters"></div>
+      </div>
+    </div>
+    <div class="wall-scroll" id="wall-scroll">
+      <div class="detail-inner">
+        <div id="work-grid" class="work-grid"></div>
+        <div id="wall-empty" class="hidden"></div>
+      </div>
+    </div>`;
+}
+
+function renderWall(force = false) {
+  if (!wallMounted) return;
+  const works = wallTasks();
+  const visible = works.filter((t) => wallInGroup(t, state.filter));
+  const sig = state.filter + '\u0002' + visible.map(cardSig).join('\u0003');
+  if (!force && sig === state.wallSig) return;
+  state.wallSig = sig;
+
+  const sub = $('#wall-sub');
+  if (sub) sub.textContent = works.length ? `${works.length} 个片段` : '';
+
+  renderWallFilters(works);
+
+  const grid = $('#work-grid');
+  const empty = $('#wall-empty');
+  if (!grid || !empty) return;
+
+  if (!visible.length) {
+    grid.innerHTML = '';
+    grid.classList.add('hidden');
+    const label = (WALL_FILTERS.find((f) => f.key === state.filter) || {}).label || '';
+    empty.innerHTML = works.length
+      ? `<div class="wall-empty"><p>没有「${label}」的作品</p><button class="btn btn-ghost btn-sm" data-action="filter-all">看全部</button></div>`
+      : `<div class="wall-empty">
+           <h3>作品墙还空着</h3>
+           <p>去创作台写下第一张工单，提交后作品会挂到这里，生成进度也在这里实时更新。</p>
+           <button class="btn btn-primary" data-action="go-studio">${ICONS.plus}去创作台</button>
+         </div>`;
+    empty.classList.remove('hidden');
     return;
   }
+  empty.classList.add('hidden');
+  grid.classList.remove('hidden');
+  syncGrid(grid, visible);
+}
 
-  if (editable(t)) {
-    box.innerHTML = editorHtml(t);
-  } else if (t.status === 'submitting' || t.status === 'queued' || t.status === 'running') {
-    box.innerHTML = progressHtml(t);
-  } else if (t.status === 'succeeded') {
-    box.innerHTML = playerHtml(t);
-  } else {
-    box.innerHTML = readonlyHtml(t);
+/* ---------------- 创作台 / tab 外壳 ---------------- */
+
+// 创作台的「当前工单」：只有还能改的任务才配占着编辑器
+function currentOrder() {
+  const t = getTask(state.selectedId);
+  return editable(t) ? t : null;
+}
+
+function renderTabs() {
+  const n = wallTasks().length;
+  const cnt = $('#tab-count');
+  if (cnt) cnt.textContent = n ? String(n) : '';
+  document.querySelectorAll('.tabbar .tab').forEach((b) => {
+    const on = b.dataset.tab === state.tab;
+    b.classList.toggle('active', on);
+    b.setAttribute('aria-selected', on ? 'true' : 'false');
+  });
+  const studio = $('#panel-studio');
+  const wall = $('#panel-wall');
+  if (studio) studio.classList.toggle('hidden', state.tab !== 'studio');
+  if (wall) wall.classList.toggle('hidden', state.tab !== 'wall');
+}
+
+function switchTab(tab) {
+  if (tab !== 'studio' && tab !== 'wall') return;
+  closeWorkModal();
+  state.tab = tab;
+  renderTabs();
+}
+
+function renderStudio(force = false) {
+  const box = $('#panel-studio');
+  if (!box) return;
+  const t = currentOrder();
+  // 空态文案取决于「是否已经有作品」，所以任务数也要进签名
+  const sig = t
+    ? [t.id, t.status, t.mode, t.model, t.error, t.downloadError, t.videoPath, t.videoUrl, t.audio].join('|')
+    : `empty:${state.tasks.length}`;
+  if (!force && sig === state.detailSig) return;
+  state.detailSig = sig;
+  box.innerHTML = t ? editorHtml(t) : emptyHtml();
+}
+
+// 老代码里的 renderDetail(true) 现在等价于「重绘创作台 + 同步 tab 与作品墙」。
+// 注意 renderWall 不带 force：作品墙靠自己的签名短路，强制重绘会重载封面视频
+function renderDetail(force = false) {
+  renderTabs();
+  renderStudio(force);
+  renderWall();
+}
+
+/* ---------------- 作品弹层 ----------------
+   全项目只有这一处放 <video controls>，作品墙上的是静音抽帧封面 */
+
+function modalBodyHtml(t) {
+  if (t.status === 'succeeded') return playerHtml(t);
+  if (ACTIVE_STATUSES.includes(t.status)) return progressHtml(t);
+  return readonlyHtml(t);
+}
+
+function renderWorkModal(force = false) {
+  const mask = $('#work-modal');
+  if (!mask) return;
+  const t = getTask(state.modalId);
+  if (!t) {
+    mask.classList.add('hidden');
+    return;
   }
+  // 弹层里也有 <video>，同样要签名短路，否则 SSE 每推一次就把播放打断一次
+  const sig = [cardSig(t), t.videoUrl].join('\u0001');
+  if (!force && sig === state.modalSig) return;
+  state.modalSig = sig;
+  $('#work-modal-title').textContent = t.status === 'succeeded'
+    ? '生成结果'
+    : (STATUS_LABEL[t.status] || '片段详情');
+  $('#work-modal-body').innerHTML = modalBodyHtml(t);
+  mask.classList.remove('hidden');
+}
+
+function openWorkModal(id) {
+  if (!getTask(id)) return;
+  state.modalId = id;
+  renderWorkModal(true);
+}
+
+function closeWorkModal() {
+  state.modalId = null;
+  state.modalSig = '';
+  const mask = $('#work-modal');
+  if (mask) mask.classList.add('hidden');
 }
 
 function emptyHtml() {
-  const modelCount = state.models.length || 17;
-  const famCount = new Set(state.models.map((m) => m.family)).size || 5;
+  // 空态有两种语义：还没有第一单，和「这一单已下达、可以再开一单了」
+  const started = state.tasks.length > 0;
   return `
     <div class="empty-state">
       <div class="empty-mark">
@@ -417,11 +604,13 @@ function emptyHtml() {
           <path d="M39.5 20.4v7.2" class="mk-stroke-mute" stroke-width="1.6" stroke-linecap="round"/>
         </svg>
       </div>
-      <h2>从第一段视频开始</h2>
-      <p>新建片段，从词元跳动网关的 ${modelCount} 个视频模型中选择一个，配置提示词、素材与参数，提交后即可在这里跟踪生成进度与结果。</p>
-      <button class="btn btn-primary" data-action="new">${ICONS.plus}新建片段</button>
+      <h2>${started ? '这一单已下达' : '从第一段视频开始'}</h2>
+      <p>${started
+        ? '作品已经挂到作品墙，生成进度在那里实时更新。想再出一段，就再开一张工单。'
+        : '创作台一次只配一段：选好模型、填上提示词与参数，提交后作品会挂到作品墙。'}</p>
+      <button class="btn btn-primary" data-action="new">${ICONS.plus}${started ? '再开一单' : '新建工单'}</button>
       ${vendorRowHtml()}
-      <div class="empty-hint">TOKENDANCE.SPACE · ${modelCount} VIDEO MODELS · ${famCount} FAMILIES</div>
+      <div class="empty-hint">TOKENDANCE.SPACE · VIDEO MODELS</div>
       <div class="empty-trust">
         <span>${ICONS.shield}API Key 与素材仅保存在本机</span>
         <span>素材只在提交时发送给你自己的网关</span>
@@ -438,7 +627,11 @@ function vendorRowHtml() {
   if (!seen.size) return '';
   const chips = [...seen.entries()].map(([key, name]) =>
     `<span class="vendor-chip" data-family="${escapeHtml(key)}">${famIcon(key)}${escapeHtml(name)}</span>`).join('');
-  return `<div class="empty-vendors">${chips}</div>`;
+  // 走马灯靠多份副本无缝循环，副本不够多的话轨道滑到末端会露出空档。
+  // 这里渲染 3 份、位移 1/3：只要单份宽度 > 容器宽度的 1/2 就不会穿帮，
+  // 当前单份约 620px、容器 540px，留有余量。副本对读屏隐藏。
+  const group = (dup) => `<div class="vendor-group"${dup ? ' aria-hidden="true"' : ''}>${chips}</div>`;
+  return `<div class="empty-vendors"><div class="vendor-track">${group(0)}${group(1)}${group(1)}</div></div>`;
 }
 
 function readonlyHtml(t) {
@@ -450,7 +643,11 @@ function readonlyHtml(t) {
           <div class="detail-sub">${escapeHtml(t.model)} · ${MODE_LABEL[t.mode] || t.mode} · ${escapeHtml(metaLine(t))} · 创建于 ${fmtTime(t.createdAt)}</div>
         </div>
         <div class="detail-actions">
-          <button class="btn btn-primary" data-action="duplicate">${ICONS.copy}复制为新片段</button>
+          ${t.status === 'failed'
+            // 只有 failed 能回到编辑器：main/tasks.js 的 update() 只放行 draft / failed
+            ? `<button class="btn btn-primary" data-action="credit">${ICONS.refresh}重新编辑</button>
+               <button class="btn btn-ghost" data-action="duplicate">${ICONS.copy}复制为新片段</button>`
+            : `<button class="btn btn-primary" data-action="duplicate">${ICONS.copy}复制为新片段</button>`}
         </div>
       </div>
       <div class="meta-grid">
@@ -555,17 +752,6 @@ function parsePricing(pricing, resolutions) {
   return { unit, cells, notes };
 }
 
-/* 价签：多档取价格区间，单档取单价，token 计费直接说明——一行解决，不再堆单元格 */
-function priceSummaryHtml(m) {
-  const { unit, cells } = parsePricing(m.pricing, m.resolutions);
-  if (!cells.length) return m.pricing ? `<span class="price-line price-token">按量计费</span>` : '';
-  if (unit !== '/秒') return `<span class="price-line">¥${cells[0].price}<small>/百万 tokens</small></span>`;
-  const prices = cells.map((c) => c.price);
-  const lo = Math.min(...prices);
-  const hi = Math.max(...prices);
-  return `<span class="price-line">${lo === hi ? `¥${lo}` : `¥${lo}–${hi}`}<small>/秒</small></span>`;
-}
-
 /* 贴纸行：最高画质(紫) + 时长(青) + 有声(粉) + 生成方式(白)——颜色即语义 */
 function tagRowHtml(m) {
   const top = m.resolutions[m.resolutions.length - 1];
@@ -597,7 +783,8 @@ function updateCostEstimate(patch = {}) {
   const el = $('#cost-estimate');
   if (!el) return;
   const t = getTask(state.selectedId);
-  const model = t && getModel(t.model);
+  // 用 findModel：没有模型时就不该有费用数字，拿默认模型算一个出来是假信息
+  const model = t && findModel(t.model);
   const text = t && model ? costEstimate(t, model, patch) : '';
   el.textContent = text;
   el.classList.toggle('hidden', !text);
@@ -606,9 +793,25 @@ function updateCostEstimate(patch = {}) {
 /* 生成方式缩写 */
 const MODE_CHAR = { text: '文', image: '图', reference: '参', edit: '编' };
 
-function modelPickerHtml(t) {
+/* ---------------- 模型选择器（渐进披露） ----------------
+   默认只呈现当前模型；点开才是可搜索的完整列表。
+   展开是内联的而不是浮层：#detail 是 overflow:auto 的滚动容器，
+   绝对定位的浮层会被它裁掉（实测内容高 2303 / 可视 663）。 */
+
+/* 模型名 / 厂商 / id / 能力一起参与匹配，让「参考」「字节」这类词也能搜到 */
+function modelMatches(m, q) {
+  if (!q) return true;
+  const hay = [
+    m.name, m.familyName, m.family, m.id, m.badge, m.desc,
+    m.modes.map((k) => MODE_LABEL[k] || k).join(' '),
+  ].join(' ').toLowerCase();
+  return hay.includes(q);
+}
+
+/* 按家族分组，保持目录里的首次出现顺序 */
+function groupByFamily(models) {
   const families = [];
-  for (const m of state.models) {
+  for (const m of models) {
     let fam = families.find((f) => f.key === m.family);
     if (!fam) {
       fam = { key: m.family, name: m.familyName || m.family, items: [] };
@@ -616,30 +819,102 @@ function modelPickerHtml(t) {
     }
     fam.items.push(m);
   }
+  return families;
+}
+
+/* 列表行只给「起价」：完整档位价目留给折叠卡片，列表行才不会被撑成两行 */
+function startPriceLabel(m) {
+  const { unit, cells } = parsePricing(m.pricing, m.resolutions);
+  if (!cells.length) return m.pricing ? '按量计费' : '';
+  if (unit !== '/秒') return `¥${cells[0].price}/百万 tokens`;
+  return `¥${Math.min(...cells.map((c) => c.price))}/秒起`;
+}
+
+function modelOptionHtml(m, selected, idx) {
+  return `
+    <button type="button" class="picker-opt ${selected ? 'is-selected' : ''}"
+            id="opt-${idx}" role="option" aria-selected="${selected ? 'true' : 'false'}"
+            data-model-pick="${escapeHtml(m.id)}">
+      <span class="opt-dot" aria-hidden="true"></span>
+      <span class="opt-name">${escapeHtml(m.name)}</span>
+      <span class="opt-dur">${m.durationAuto ? '智能 ' : ''}${m.duration[0]}–${m.duration[1]}s</span>
+      <span class="opt-price">${escapeHtml(startPriceLabel(m))}</span>
+      <span class="opt-badge" title="${escapeHtml(m.badge || '')}">${m.badge ? escapeHtml(m.badge) : ''}</span>
+    </button>`;
+}
+
+/* 列表本体单独成函数：搜索时只重绘它，不重绘整个编辑器——
+   否则 <input> 会被重建，用户打一个字就失焦 */
+function modelListHtml(t, query) {
+  const q = (query || '').trim().toLowerCase();
+  const families = groupByFamily(state.models.filter((m) => modelMatches(m, q)));
+  if (!families.length) {
+    return `
+      <div class="picker-empty">
+        <span>没有匹配「${escapeHtml(query.trim())}」的模型</span>
+        <button type="button" class="btn btn-ghost btn-sm" data-picker-clear>清空搜索</button>
+      </div>`;
+  }
+  let idx = 0;
   return families.map((fam) => `
-    <div class="model-family" data-family="${escapeHtml(fam.key)}">
-      <div class="model-family-name">${famIcon(fam.key)}${escapeHtml(fam.name)} · ${fam.items.length}</div>
-      <div class="model-grid">
-        ${fam.items.map((m) => {
-          const active = t.model === m.id;
-          return `
-          <button type="button" class="model-card ${active ? 'active' : ''}" data-model="${m.id}">
-            <span class="model-card-head">
-              <span class="model-card-name">${escapeHtml(m.name)}</span>
-              ${m.badge ? `<span class="model-badge">${escapeHtml(m.badge)}</span>` : ''}
-            </span>
-            ${priceSummaryHtml(m)}
-            ${tagRowHtml(m)}
-            ${active ? `
-            <span class="model-card-more">
-              ${m.pricing ? `<span class="more-pricing">${escapeHtml(m.pricing)}</span>` : ''}
-              ${m.desc ? `<span class="more-desc">${escapeHtml(m.desc)}</span>` : ''}
-              <span class="more-id">${escapeHtml(m.id)}</span>
-            </span>` : ''}
-          </button>`;
-        }).join('')}
-      </div>
+    <div class="picker-group">
+      <div class="picker-group-name">${famIcon(fam.key)}${escapeHtml(fam.name)}</div>
+      ${fam.items.map((m) => modelOptionHtml(m, t.model === m.id, idx++)).join('')}
     </div>`).join('');
+}
+
+/* 只换列表内容，不碰搜索框 */
+function refreshModelList() {
+  const list = $('#model-list');
+  if (!list) return;
+  const t = getTask(state.selectedId);
+  list.innerHTML = t ? modelListHtml(t, state.modelQuery) : '';
+}
+
+function pickerPanelHtml(t) {
+  return `
+    <div class="picker-panel">
+      <div class="picker-search">
+        <input type="text" id="model-search" data-model-search role="combobox"
+               aria-expanded="true" aria-controls="model-list" aria-label="搜索模型"
+               placeholder="搜索模型、厂商或能力…" autocomplete="off"
+               value="${escapeHtml(state.modelQuery)}" />
+      </div>
+      <div class="picker-list" id="model-list" role="listbox" aria-label="模型列表">
+        ${modelListHtml(t, state.modelQuery)}
+      </div>
+    </div>`;
+}
+
+/* 折叠卡片：当前模型的模型级信息（档位价目 / 简介 / 能力）。
+   整块是热区，「更换模型」只是视觉提示，不必精确点到它。
+   还没选模型时没有可折叠的东西：列表恒展开，卡片退化成一句引导，
+   而且不做成 <button> —— 让它可点却点不动、「收起」是句谎话，不如老老实实是块说明 */
+function modelPickerHtml(t) {
+  const model = findModel(t.model);
+  const open = state.modelPickerOpen || !model;
+  const card = model ? `
+      <button type="button" class="picker-current" data-picker-toggle
+              aria-expanded="${open ? 'true' : 'false'}" aria-controls="model-list">
+        <span class="picker-head">
+          <span class="picker-icon" data-family="${escapeHtml(model.family)}">${famIcon(model.family)}</span>
+          <span class="picker-name">${escapeHtml(model.name)}</span>
+          ${model.badge ? `<span class="model-badge">${escapeHtml(model.badge)}</span>` : ''}
+          <span class="picker-swap">${open ? '收起' : '更换模型'}<i class="caret" aria-hidden="true"></i></span>
+        </span>
+        ${model.pricing ? `<span class="picker-pricing">${escapeHtml(model.pricing)}</span>` : ''}
+        ${model.desc ? `<span class="picker-desc">${escapeHtml(model.desc)}</span>` : ''}
+        ${tagRowHtml(model)}
+      </button>` : `
+      <div class="picker-current is-unset">
+        <span class="picker-head"><span class="picker-name">先选一个模型</span></span>
+        <span class="picker-desc">生成方式、时长、分辨率、画面比例，都会按所选模型自己的能力和限制来组装。</span>
+      </div>`;
+  return `
+    <div class="picker ${open ? 'is-open' : ''}">
+      ${card}
+      ${open ? pickerPanelHtml(t) : ''}
+    </div>`;
 }
 
 function modeSegmentedHtml(t, model) {
@@ -667,47 +942,49 @@ function durationChipsHtml(t, model) {
   return chips.join('');
 }
 
+/* 参数区住在编辑器右栏：每一组独占一行，「标签在左、控件在右」。
+   左栏那张大卡片式的排版（16px 加粗标题 + 下划线 + 24px 内边距）在这里是负担 ——
+   一个 39px 高的分段控件顶着 138px 的卡片，标题比内容还重 */
 function paramsHtml(t, model) {
   const [min, max] = model.duration;
   const durationVal = Number(t.duration) === -1 ? '' : t.duration;
-  const audioBlock = model.audio ? `
-    <div class="field-col" style="flex:0 0 auto;min-width:120px">
-      <span class="section-label">有声视频</span>
-      <div class="toggle-row">
-        <button type="button" class="toggle" role="switch" aria-checked="${t.audio ? 'true' : 'false'}" data-field="audio" aria-label="有声视频开关"></button>
-        <span class="toggle-label">${t.audio ? '开启' : '关闭'}</span>
-      </div>
-    </div>` : '';
   const adaptiveHint = (t.mode === 'image' || t.mode === 'edit') && t.ratio === 'adaptive'
     ? '<span class="hint accent">比例自适应：输出宽高比将跟随输入素材</span>' : '';
   const autoHint = model.durationAuto && Number(t.duration) === -1
     ? '<span class="hint">智能时长：由模型根据内容自动决定</span>' : '';
+  const audioRow = model.audio ? `
+      <div class="param-row">
+        <span class="param-label">有声视频</span>
+        <div class="toggle-row">
+          <button type="button" class="toggle" role="switch" aria-checked="${t.audio ? 'true' : 'false'}" data-field="audio" aria-label="有声视频开关"></button>
+          <span class="toggle-label">${t.audio ? '开启' : '关闭'}</span>
+        </div>
+      </div>` : '';
   return `
     <section class="editor-section">
-      <div class="field-row">
-        <div class="field-col">
-          <span class="section-label">时长（秒）<span class="section-note">${min}–${max}s</span></span>
-          <div class="chips" data-field="duration">
-            ${durationChipsHtml(t, model)}
-            <input type="number" id="f-duration" min="${min}" max="${max}" value="${durationVal}" placeholder="${model.durationAuto ? '智能' : ''}" style="width:76px" />
-          </div>
-          ${autoHint}
+      <span class="section-label">参数</span>
+      <div class="param-row">
+        <span class="param-label">时长<span class="param-note">${min}–${max}s</span></span>
+        <div class="chips" data-field="duration">
+          ${durationChipsHtml(t, model)}
+          <input type="number" id="f-duration" min="${min}" max="${max}" value="${durationVal}" placeholder="${model.durationAuto ? '智能' : ''}" />
         </div>
-        <div class="field-col">
-          <span class="section-label">分辨率</span>
-          <div class="chips" data-field="resolution">
-            ${model.resolutions.map((r) => `<button type="button" class="chip ${t.resolution === r ? 'active' : ''}" data-value="${escapeHtml(r)}">${escapeHtml(r)}</button>`).join('')}
-          </div>
-        </div>
-        <div class="field-col">
-          <span class="section-label">画面比例</span>
-          <div class="chips" data-field="ratio">
-            ${model.ratios.map((r) => `<button type="button" class="chip ${t.ratio === r ? 'active' : ''}" data-value="${escapeHtml(r)}">${ratioLabel(r)}</button>`).join('')}
-          </div>
-          ${adaptiveHint}
-        </div>
-        ${audioBlock}
+        ${autoHint}
       </div>
+      <div class="param-row">
+        <span class="param-label">分辨率</span>
+        <div class="chips" data-field="resolution">
+          ${model.resolutions.map((r) => `<button type="button" class="chip ${t.resolution === r ? 'active' : ''}" data-value="${escapeHtml(r)}">${escapeHtml(r)}</button>`).join('')}
+        </div>
+      </div>
+      <div class="param-row">
+        <span class="param-label">画面比例</span>
+        <div class="chips" data-field="ratio">
+          ${model.ratios.map((r) => `<button type="button" class="chip ${t.ratio === r ? 'active' : ''}" data-value="${escapeHtml(r)}">${ratioLabel(r)}</button>`).join('')}
+        </div>
+        ${adaptiveHint}
+      </div>
+      ${audioRow}
     </section>`;
 }
 
@@ -788,17 +1065,17 @@ function mediaSectionHtml(t, model) {
         <span class="hint">支持选择本地图片，或直接粘贴可公开访问的图片 URL；宽高比可在下方固定或设为自适应</span>
       </section>`;
   }
+  // 下面两组素材块都进同一个 .media-grid：横向铺开后才不会一块压着一块往下摞。
+  // 参考图那一块允许有多张缩略图，高度天然比 URL 输入框高，让它占第一格
   if (t.mode === 'reference') {
-    const extra = model.refImagesOnly ? '' : `
-      <div class="media-grid">
-        ${mediaSlotHtml(t, 'refVideo', '参考视频（仅 URL）', 'video', false, true)}
-        ${mediaSlotHtml(t, 'refAudio', '参考音频（仅 URL）', 'audio', false, true)}
-      </div>`;
     return `
       <section class="editor-section">
         <span class="section-label">参考素材</span>
-        ${refImagesHtml(t, model)}
-        ${extra}
+        <div class="media-grid">
+          ${refImagesHtml(t, model)}
+          ${model.refImagesOnly ? '' : mediaSlotHtml(t, 'refVideo', '参考视频（仅 URL）', 'video', false, true)}
+          ${model.refImagesOnly ? '' : mediaSlotHtml(t, 'refAudio', '参考音频（仅 URL）', 'audio', false, true)}
+        </div>
         <span class="hint">${model.refImagesOnly ? '至少添加一张参考图片' : '参考图片与参考视频至少提供一项，可自由组合'}</span>
       </section>`;
   }
@@ -806,24 +1083,73 @@ function mediaSectionHtml(t, model) {
     return `
       <section class="editor-section">
         <span class="section-label">编辑素材</span>
-        ${mediaSlotHtml(t, 'editVideo', '源视频（仅 URL）', 'video', true, true)}
-        ${refImagesHtml(t, model)}
+        <div class="media-grid">
+          ${mediaSlotHtml(t, 'editVideo', '源视频（仅 URL）', 'video', true, true)}
+          ${refImagesHtml(t, model)}
+        </div>
         <span class="hint">源视频为待编辑的原始片段；参考图可选，用于风格 / 主体替换</span>
       </section>`;
   }
   return '';
 }
 
+/* 模型区块（标签 + 同步按钮 + 选择器）。选没选模型都要出现，抽出来给两种骨架共用 */
+function modelSectionHtml(t) {
+  return `
+    <section class="editor-section">
+      <span class="section-label">模型<span class="section-note sync-note"><span id="sync-status">${syncStatusText()}</span><button type="button" class="icon-btn sync-refresh ${state.modelSyncing ? 'spinning' : ''}" data-action="sync-models" title="同步模型目录" ${state.modelSyncing ? 'disabled' : ''}>${ICONS.refresh}</button></span></span>
+      ${modelPickerHtml(t)}
+    </section>`;
+}
+
+/* 底部操作条。跟文档流走、不做 sticky —— 悬浮会盖住它下面的内容。
+   没有可用模型时「开始生成」是禁用的，否则点下去只会换来一句报错 */
+function editorFootHtml(t, cost) {
+  const ready = !!findModel(t.model);
+  return `
+    <div class="editor-foot">
+      <div class="foot-left">
+        <span class="cost-estimate ${cost ? '' : 'hidden'}" id="cost-estimate">${escapeHtml(cost)}</span>
+        <span class="save-state" id="save-state">${ready ? '更改会自动保存' : '选定模型后即可配置参数'}</span>
+      </div>
+      <div class="foot-actions">
+        <button class="btn btn-ghost btn-danger" data-action="remove">${ICONS.trash}删除</button>
+        <button class="btn btn-primary" data-action="submit"
+                ${ready ? `title="开始生成（${MOD_HINT}⏎）"` : 'disabled title="请先选择模型"'}
+        >${ICONS.play}开始生成</button>
+      </div>
+    </div>`;
+}
+
 function editorHtml(t) {
-  const model = getModel(t.model);
-  if (!model) return '<div class="detail-inner">模型目录加载失败</div>';
+  const model = findModel(t.model);
 
   const failedBanner = t.status === 'failed' && t.error
     ? `<div class="form-error">${ICONS.alert}<div><strong>上次提交失败</strong><br>${escapeHtml(t.error)}</div></div>` : '';
 
-  // 任务保存的模型已不在目录中（下线或目录未同步）：提示重新选择，而不是静默兜底
-  const staleBanner = model.id !== t.model
-    ? `<div class="form-error form-warn">${ICONS.alert}<div><strong>模型已下线</strong><br>该片段使用的模型 ${escapeHtml(t.model)} 已不在当前目录中，请重新选择模型后再提交。</div></div>` : '';
+  // 没有可用模型时只出「模型选择区 + 底部操作」，不摆任何表单控件。
+  // 生成方式 / 提示词 / 素材 / 参数全都取决于具体模型的能力，先摆一排还不知道自己会变成
+  // 什么样的控件，只会让人猜不透；等模型定了再组装，表单才有确定的含义。
+  // 两种情形共用这套骨架：还没选过模型（空串），以及选过的模型已不在目录里。
+  if (!model) {
+    const notice = t.model
+      ? `<div class="form-error form-warn">${ICONS.alert}<div><strong>模型已下线</strong><br>该片段使用的模型 ${escapeHtml(t.model)} 已不在当前目录中，请重新选择一个模型。</div></div>`
+      : '';
+    return `
+      <div class="detail-inner">
+        <div class="detail-head">
+          <div>
+            <h2 class="detail-title">${t.status === 'failed' ? '修改后重新提交' : '新建片段'}</h2>
+            <div class="detail-sub">${escapeHtml(t.model || '未选择模型')} · 创建于 ${fmtTime(t.createdAt)}</div>
+          </div>
+          ${badge(t)}
+        </div>
+        ${failedBanner}
+        ${notice}
+        ${modelSectionHtml(t)}
+        ${editorFootHtml(t, '')}
+      </div>`;
+  }
 
   const promptLabel = t.mode === 'edit' ? '编辑指令' : '提示词';
   const promptPlaceholder = t.mode === 'edit'
@@ -842,27 +1168,28 @@ function editorHtml(t) {
         ${badge(t)}
       </div>
       ${failedBanner}
-      ${staleBanner}
-      <section class="editor-section">
-        <span class="section-label">模型<span class="section-note sync-note"><span id="sync-status">${syncStatusText()}</span><button type="button" class="icon-btn sync-refresh ${state.modelSyncing ? 'spinning' : ''}" data-action="sync-models" title="同步模型目录" ${state.modelSyncing ? 'disabled' : ''}>${ICONS.refresh}</button></span></span>
-        ${modelPickerHtml(t)}
-      </section>
-      ${modeSegmentedHtml(t, model)}
-      <section class="editor-section">
-        <span class="section-label">${promptLabel}<span class="section-note" id="prompt-count">${promptLen ? `${promptLen} 字` : ''}</span></span>
-        <textarea class="prompt-input" id="f-prompt" placeholder="${promptPlaceholder}">${escapeHtml(t.prompt)}</textarea>
-      </section>
-      ${mediaSectionHtml(t, model)}
-      ${paramsHtml(t, model)}
-      <div class="editor-foot">
-        <div class="foot-left">
-          <span class="cost-estimate ${cost ? '' : 'hidden'}" id="cost-estimate">${escapeHtml(cost)}</span>
-          <span class="save-state" id="save-state">更改会自动保存</span>
+      <div class="editor-cols">
+        <!-- 左栏：写内容。模型与提示词都在这儿，宽度按「要读要写」的需求给 -->
+        <div class="editor-main">
+          ${modelSectionHtml(t)}
+          <section class="editor-section">
+            <span class="section-label">${promptLabel}<span class="section-note" id="prompt-count">${promptLen ? `${promptLen} 字` : ''}</span></span>
+            <textarea class="prompt-input" id="f-prompt" placeholder="${promptPlaceholder}">${escapeHtml(t.prompt)}</textarea>
+          </section>
         </div>
-        <div class="foot-actions">
-          <button class="btn btn-ghost btn-danger" data-action="remove">${ICONS.trash}删除</button>
-          <button class="btn btn-primary" data-action="submit" title="开始生成（${MOD_HINT}⏎）">${ICONS.play}开始生成</button>
-        </div>
+        <!-- 右栏：调参数。这几组控件都是「看一眼、点一下」的短停留操作，
+             竖着排成控制条，比横铺成三列卡片更省纵向空间，也更好扫 -->
+        <aside class="editor-side">
+          ${modeSegmentedHtml(t, model)}
+          ${paramsHtml(t, model)}
+          <!-- 提交条沉在右栏底部：它往上贴着参数区的话，
+               右下角会空出一大块没人用的地方 -->
+          ${editorFootHtml(t, cost)}
+        </aside>
+        <!-- 素材接在左栏下方（右栏跨两行，所以它只占左栏那一列）。
+             它按模式出现、块数不定，横铺开才有地方并排 —— 竖着摞的话，
+             参考生视频与视频编辑这两种最重的模式会把整页顶出屏幕 -->
+        ${mediaSectionHtml(t, model)}
       </div>
     </div>`;
 }
@@ -898,6 +1225,9 @@ async function patchRefImages(t, updater) {
 }
 
 function validateForSubmit(t) {
+  // 没有可用模型，后面按 t.mode 分的规则全都无从谈起（t.mode 此时是空的）
+  if (!t.model) return '请先为该片段选择模型';
+  if (!findModel(t.model)) return '该片段使用的模型已下线，请重新选择模型';
   const m = t.media || {};
   const prompt = (t.prompt || '').trim();
   if (t.mode === 'text' && !prompt) return '文生视频需要填写提示词';
@@ -914,25 +1244,34 @@ function validateForSubmit(t) {
 
 /* ---------------- 任务操作 ---------------- */
 
-function rememberModel(id) {
-  try { localStorage.setItem(LAST_MODEL_KEY, id); } catch { /* 忽略 */ }
+/* 把一张任务载入创作台。切换工单时清掉模型选择器的展开态与搜索词，
+   否则上一张工单的搜索词会被带进新工单 */
+function loadIntoStudio(id) {
+  state.selectedId = id;
+  state.modelPickerOpen = false;
+  state.modelQuery = '';
+  switchTab('studio');
+  renderStudio(true);
+  const input = $('#model-search');
+  if (input) input.focus();
 }
 
-function lastModel() {
-  try {
-    const id = localStorage.getItem(LAST_MODEL_KEY);
-    if (id && getModel(id)) return id;
-  } catch { /* 忽略 */ }
-  return DEFAULT_MODEL;
-}
-
+/* 新建工单不预置模型：先让用户选，表单再按该模型的能力组装出来。
+   连带去掉了「记住上次用的模型」—— 预选会让表单在用户还没选之前就长出来，
+   与这个交互直接矛盾（原 lastModel/rememberModel 随之成为死代码，一并删除） */
 async function newTask() {
+  // 草稿不在作品墙上，攒多了用户根本找不到，所以「一次只配一段」：
+  // 已经有一张没提交的，就把它推到眼前，而不是再建一个空壳
+  const draft = state.tasks.find((t) => t.status === 'draft');
+  if (draft) {
+    loadIntoStudio(draft.id);
+    showToast('创作台已有一张未提交的工单');
+    return;
+  }
   try {
-    const task = await studio.createTask({ model: lastModel() });
+    const task = await studio.createTask({});
     mergeTask(task);
-    state.selectedId = task.id;
-    renderSidebar();
-    renderDetail(true);
+    loadIntoStudio(task.id);
   } catch (err) {
     showToast(err.message, 'error');
   }
@@ -942,10 +1281,9 @@ async function duplicateTask(id) {
   try {
     const task = await studio.duplicateTask(id);
     mergeTask(task);
-    state.selectedId = task.id;
-    renderSidebar();
-    renderDetail(true);
-    showToast('已复制为新片段', 'success');
+    closeWorkModal();
+    loadIntoStudio(task.id);
+    showToast('已复制为新工单', 'success');
   } catch (err) {
     showToast(err.message, 'error');
   }
@@ -960,11 +1298,9 @@ async function removeTask(id) {
   try {
     await studio.removeTask(id);
     state.tasks = state.tasks.filter((x) => x.id !== id);
+    // 不再兜底选中别的任务：删掉工单就该回到走马灯，而不是莫名跳进另一段的编辑器
     if (state.selectedId === id) state.selectedId = null;
-    if (!getTask(state.selectedId)) {
-      state.selectedId = state.tasks.length ? state.tasks[0].id : null;
-    }
-    renderSidebar();
+    if (state.modalId === id) closeWorkModal();
     renderDetail(true);
   } catch (err) {
     showToast(err.message, 'error');
@@ -978,40 +1314,30 @@ async function submitOne(id) {
   const fresh = getTask(id);
   const problem = validateForSubmit(fresh);
   if (problem) {
-    state.selectedId = id;
-    renderSidebar();
-    renderDetail(true);
+    loadIntoStudio(id);
     showToast(problem, 'error');
     return;
   }
   try {
     const submitted = await studio.submitTask(id);
     mergeTask(submitted);
-    if (submitted.status === 'failed') showToast(submitted.error || '提交失败', 'error');
+    if (submitted.status === 'failed') {
+      showToast(submitted.error || '提交失败', 'error');
+      loadIntoStudio(id);   // 失败了要留在编辑器里改
+    } else {
+      finishOrder(id);
+      showToast('已提交，开始生成', 'success');
+    }
   } catch (err) {
     showToast(err.message, 'error');
   }
 }
 
-async function submitAll() {
-  await flushSave(getTask(state.selectedId));
-  const drafts = state.tasks.filter((t) => t.status === 'draft');
-  for (const t of drafts) {
-    const problem = validateForSubmit(t);
-    if (problem) {
-      state.selectedId = t.id;
-      renderSidebar();
-      renderDetail(true);
-      showToast(`有片段未配置完整：${problem}`, 'error');
-      return;
-    }
-  }
-  try {
-    await studio.submitAllTasks();
-    showToast('全部草稿已提交', 'success');
-  } catch (err) {
-    showToast(err.message, 'error');
-  }
+/* 工单交出去了就不再占着编辑器：创作台回到走马灯，
+   此刻它正好承担「这一单已下达，要再开一单吗」的语义 */
+function finishOrder(id) {
+  if (state.selectedId === id) state.selectedId = null;
+  renderDetail(true);
 }
 
 /* ---------------- 详情区统一事件委托 ---------------- */
@@ -1044,7 +1370,10 @@ async function handleDetailAction(t, action, btn) {
         const submitted = await studio.submitTask(t.id);
         mergeTask(submitted);
         if (submitted.status === 'failed') showToast(submitted.error || '提交失败', 'error');
-        else showToast('已提交，开始生成', 'success');
+        else {
+          finishOrder(t.id);
+          showToast('已提交，开始生成', 'success');
+        }
       } catch (err) {
         showToast(err.message, 'error');
       } finally {
@@ -1052,6 +1381,26 @@ async function handleDetailAction(t, action, btn) {
       }
       break;
     }
+    case 'credit': {
+      // 失败的任务可以回到编辑器改。succeeded/cancelled/expired 不行 ——
+      // main/tasks.js 的 update() 只放行 draft 与 failed，给了按钮也只会报错
+      if (!t || t.status !== 'failed') return;
+      closeWorkModal();
+      loadIntoStudio(t.id);
+      break;
+    }
+    case 'open-work': {
+      const card = btn && btn.closest('.work-card');
+      if (card) openWorkModal(card.dataset.id);
+      break;
+    }
+    case 'go-studio':
+      switchTab('studio');
+      break;
+    case 'filter-all':
+      state.filter = 'all';
+      renderWall(true);
+      break;
     case 'reveal':
       if (t && t.videoPath) await studio.revealVideo(t.videoPath);
       break;
@@ -1069,7 +1418,8 @@ async function handleDetailAction(t, action, btn) {
         try {
           const updated = await studio.redownloadTask(t.id);
           mergeTask(updated);
-          renderDetail(true);
+          renderDetail();
+          renderWorkModal(true);
           if (updated && updated.downloadError) showToast(updated.downloadError, 'error');
           else if (updated && updated.videoPath) showToast('视频已重新下载到本地', 'success');
         } catch (err) {
@@ -1086,15 +1436,43 @@ function bindDetailEvents() {
   const box = $('#detail');
 
   box.addEventListener('click', async (e) => {
+    // 作品墙有自己的委托（bindWallEvents）。不在这里挡掉的话，
+    // 墙上的按钮会拿到创作台的当前工单 —— 删错、复制错
+    if (e.target.closest('#panel-wall')) return;
+
     const t = getTask(state.selectedId);
 
-    const modelBtn = e.target.closest('[data-model]');
-    if (modelBtn && t && editable(t) && modelBtn.dataset.model !== t.model) {
+    const pickToggle = e.target.closest('[data-picker-toggle]');
+    if (pickToggle && t && editable(t)) {
+      state.modelPickerOpen = !state.modelPickerOpen;
+      if (!state.modelPickerOpen) state.modelQuery = '';   // 收起即清搜索，下次展开是干净列表
+      renderDetail(true);
+      if (state.modelPickerOpen) {
+        const input = $('#model-search');
+        if (input) input.focus();
+      }
+      return;
+    }
+
+    const pickClear = e.target.closest('[data-picker-clear]');
+    if (pickClear) {
+      state.modelQuery = '';
+      refreshModelList();
+      const input = $('#model-search');
+      if (input) { input.value = ''; input.focus(); }
+      return;
+    }
+
+    const modelOpt = e.target.closest('[data-model-pick]');
+    if (modelOpt && t && editable(t)) {
+      const id = modelOpt.dataset.modelPick;
+      state.modelPickerOpen = false;
+      state.modelQuery = '';
+      if (id === t.model) { renderDetail(true); return; }
       try {
         await flushSave(t);
-        const updated = await studio.updateTask(t.id, { model: modelBtn.dataset.model });
+        const updated = await studio.updateTask(t.id, { model: id });
         mergeTask(updated);
-        rememberModel(updated.model);
         renderDetail(true);
       } catch (err) { showToast(err.message, 'error'); }
       return;
@@ -1179,6 +1557,12 @@ function bindDetailEvents() {
   });
 
   box.addEventListener('input', (e) => {
+    // 搜索走局部重绘：整个编辑器重绘会把 <input> 一起重建，打一个字就失焦
+    if (e.target.closest('[data-model-search]')) {
+      state.modelQuery = e.target.value;
+      refreshModelList();
+      return;
+    }
     const t = getTask(state.selectedId);
     if (!t || !editable(t)) return;
     if (e.target.id === 'f-prompt') {
@@ -1226,6 +1610,45 @@ function bindDetailEvents() {
       }
     }
   });
+
+  // 搜索框里的键盘导航。焦点始终留在 input 上，靠 .is-active + aria-activedescendant
+  // 标示当前项（WAI-ARIA combobox 模式），不用把焦点搬到 option 上
+  box.addEventListener('keydown', (e) => {
+    const input = e.target.closest('[data-model-search]');
+    if (!input) return;
+    const opts = [...document.querySelectorAll('#model-list .picker-opt')];
+
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (!opts.length) return;
+      const cur = opts.findIndex((o) => o.classList.contains('is-active'));
+      const next = e.key === 'ArrowDown'
+        ? (cur + 1) % opts.length
+        : (cur <= 0 ? opts.length - 1 : cur - 1);
+      opts.forEach((o, i) => o.classList.toggle('is-active', i === next));
+      input.setAttribute('aria-activedescendant', opts[next].id);
+      opts[next].scrollIntoView({ block: 'nearest' });
+      return;
+    }
+
+    // 带修饰键的 Enter 留给全局的「提交」快捷键，不要在这里截胡
+    if (e.key === 'Enter' && !e.metaKey && !e.ctrlKey) {
+      e.preventDefault();
+      const pick = opts.find((o) => o.classList.contains('is-active')) || opts[0];
+      if (pick) pick.click();
+      return;
+    }
+
+    if (e.key === 'Escape') {
+      // 面板里的 Esc 只收起面板：全局那条 Esc（关弹窗/引导）不应被连累
+      e.stopPropagation();
+      state.modelPickerOpen = false;
+      state.modelQuery = '';
+      renderDetail(true);
+      const back = $('[data-picker-toggle]');
+      if (back) back.focus();
+    }
+  });
 }
 
 /* ---------------- 设置 ---------------- */
@@ -1248,7 +1671,30 @@ async function openSettings() {
   $('#set-toggle-key').textContent = '显示';
   $('#test-result').textContent = '';
   $('#test-result').className = 'test-result';
+  // 每次打开都重新拉一次版本（启动态用户切分支/script 也能看到当前真实版本）
+  if (!state.appInfo) {
+    try { state.appInfo = await studio.getAppInfo(); } catch { /* 留空也能用 */ }
+  }
+  paintAppVersion();
+  // 进入设置时把上一次的更新结果清掉，避免旧提示混在新一次结果里
+  $('#update-result').innerHTML = '';
+  $('#update-result').className = 'update-result';
   $('#settings-modal').classList.remove('hidden');
+}
+
+function paintAppVersion() {
+  const info = state.appInfo || {};
+  $('#app-version').textContent = info.version ? `v${info.version}` : '未知';
+  const ch = $('#app-channel');
+  if (info.isElectron === false) {
+    ch.textContent = '开发态（npm start）';
+    ch.title = '当前以源码方式运行，自动更新下载的安装包不适用，请用 git pull 拉取最新代码';
+  } else if (info.isElectron === true) {
+    ch.textContent = '桌面端';
+    ch.title = '';
+  } else {
+    ch.textContent = '';
+  }
 }
 
 function closeSettings() {
@@ -1324,6 +1770,91 @@ function bindSettings() {
       showToast(err.message, 'error');
     }
   });
+
+  /* ---- 检查更新 ---- */
+  $('#btn-check-update').addEventListener('click', onCheckUpdate);
+}
+
+function formatBytes(n) {
+  if (!n || n < 1024) return n ? `${n} B` : '';
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / 1024 / 1024).toFixed(1)} MB`;
+}
+
+// 把 GitHub release body 里的 markdown 噪声压一压再展示。
+// 不做完整渲染（不想引第三方 markdown 库，也不想写解析器），只去掉最常见的：
+//   - 标题前后的 # 符号
+//   - 引用、列表项、无序列表符号
+//   - 多余空行合并
+// 目的：看起来没那么糙，够用就行。
+function flattenReleaseNotes(s) {
+  if (!s) return '';
+  return s
+    .replace(/\r\n/g, '\n')
+    .split('\n')
+    .map((line) => line
+      .replace(/^#{1,6}\s*/, '')   // # ## ### 标题符
+      .replace(/^>\s*/, '')        // > 引用
+      .replace(/^[-*+]\s+/, '· ')  // 无序列表
+      .replace(/^\d+\.\s+/, '· '), // 有序列表
+    )
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+function paintUpdateResult(data) {
+  const box = $('#update-result');
+  box.innerHTML = '';
+  if (data.hasUpdate) {
+    const date = data.publishedAt ? new Date(data.publishedAt) : null;
+    const dateStr = date && !isNaN(date) ? date.toISOString().slice(0, 10) : '';
+    box.className = 'update-result has-update';
+    const notes = flattenReleaseNotes(data.releaseNotes);
+    box.innerHTML = `
+      <div class="update-headline">发现新版本 <strong>v${escapeHtml(data.latest)}</strong>${dateStr ? ` <span class="update-date">（${dateStr}）</span>` : ''}</div>
+      ${notes ? `<pre class="update-notes">${escapeHtml(notes)}</pre>` : ''}
+      <div class="update-actions">
+        <a class="btn btn-primary btn-sm" href="${escapeHtml(data.downloadUrl)}" target="_blank" rel="noopener noreferrer">前往下载</a>
+        ${data.fileName ? `<span class="update-meta">${escapeHtml(data.fileName)}${data.fileSize ? ` · ${formatBytes(data.fileSize)}` : ''}</span>` : ''}
+        ${data.releaseUrl ? `<a class="update-meta-link" href="${escapeHtml(data.releaseUrl)}" target="_blank" rel="noopener noreferrer">在 GitHub 查看</a>` : ''}
+      </div>
+    `;
+  } else {
+    box.className = 'update-result ok';
+    // 没有新版时显示「当前版本」而不是「最新 Release 的版本号」：
+    // 本地跑的是比最新 Release 还新的开发版时（latest < current），
+    // 后者会在版本行写着 v0.2.0、下面一行却说「已是最新版本 v0.1.0」
+    box.innerHTML = `<div class="update-headline">已是最新版本 <strong>v${escapeHtml(data.current || data.latest)}</strong></div>`;
+  }
+}
+
+function paintUpdateError(message) {
+  const box = $('#update-result');
+  box.className = 'update-result bad';
+  box.innerHTML = `<div class="update-headline">检查失败：${escapeHtml(message)}</div>`;
+}
+
+async function onCheckUpdate() {
+  if (state.updateCheckBusy) return;
+  const btn = $('#btn-check-update');
+  const result = $('#update-result');
+  state.updateCheckBusy = true;
+  btn.disabled = true;
+  const orig = btn.textContent;
+  btn.textContent = '检查中…';
+  result.className = 'update-result busy';
+  result.textContent = '正在连接 GitHub…';
+  try {
+    const data = await studio.checkUpdate();
+    paintUpdateResult(data);
+  } catch (err) {
+    paintUpdateError(err.message || String(err));
+  } finally {
+    state.updateCheckBusy = false;
+    btn.disabled = false;
+    btn.textContent = orig;
+  }
 }
 
 /* ---------------- 网关状态灯 ---------------- */
@@ -1354,44 +1885,25 @@ async function refreshConnStatus() {
 
 function bindGlobal() {
   $('#btn-new').addEventListener('click', newTask);
-  $('#btn-submit-all').addEventListener('click', submitAll);
   $('#btn-theme').addEventListener('click', cycleTheme);
   $('#btn-conn').addEventListener('click', openSettings);
   $('#btn-help').addEventListener('click', startTour);
 
   // 快捷键提示写进按钮 tooltip
-  $('#btn-new').title = `新建片段（${MOD_HINT}N）`;
+  $('#btn-new').title = `新建工单（${MOD_HINT}N）`;
   $('#btn-settings').title = `设置（${MOD_HINT},）`;
 
-  $('#queue-filters').addEventListener('click', (e) => {
-    const chip = e.target.closest('[data-filter]');
-    if (!chip || chip.dataset.filter === state.filter) return;
-    state.filter = chip.dataset.filter;
-    renderSidebar();
-  });
-
-  $('#task-list').addEventListener('click', async (e) => {
-    const actionBtn = e.target.closest('[data-action]');
-    const card = e.target.closest('.task-card');
-    if (actionBtn && card) {
-      e.stopPropagation();
-      const id = card.dataset.id;
-      const action = actionBtn.dataset.action;
-      if (action === 'submit') await submitOne(id);
-      else if (action === 'duplicate') await duplicateTask(id);
-      else if (action === 'remove') await removeTask(id);
-      return;
-    }
-    if (card) {
-      state.selectedId = card.dataset.id;
-      renderSidebar();
-      renderDetail(true);
-    }
+  // tab 栏：切换只改可见性，不重建 DOM（作品墙的 scrollTop 与封面视频因此得以保留）
+  document.querySelector('.tabbar').addEventListener('click', (e) => {
+    const tab = e.target.closest('[data-tab]');
+    if (tab) switchTab(tab.dataset.tab);
   });
 
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
       if (tourRoot) { endTour(); return; }
+      // 弹层排在设置前面：反过来会出现「弹层开着按 Esc 没反应」
+      if (state.modalId) { closeWorkModal(); return; }
       closeSettings();
       return;
     }
@@ -1401,8 +1913,10 @@ function bindGlobal() {
       e.preventDefault();
       newTask();
     } else if (key === 'enter') {
-      const t = getTask(state.selectedId);
-      if (t && (t.status === 'draft' || t.status === 'failed')) {
+      // 弹层开着时不要穿透到背后的工单
+      if (state.modalId) return;
+      const t = currentOrder();
+      if (t) {
         e.preventDefault();
         submitOne(t.id);
       }
@@ -1412,10 +1926,53 @@ function bindGlobal() {
     }
   });
 
+  // 只改文本，不触发任何重渲染 —— 作品墙与弹层里的计时共用它。
+  // 一旦在这里调 renderWall()，标题栏的秒数就会变成每秒重载一次封面视频
   setInterval(() => {
-    const el = $('#elapsed');
-    if (el && el.dataset.since) el.textContent = fmtElapsed(Number(el.dataset.since));
+    document.querySelectorAll('[data-since]').forEach((el) => {
+      el.textContent = fmtElapsed(Number(el.dataset.since));
+    });
   }, 1000);
+}
+
+/* 作品墙的事件委托。挂在自己身上而不是并入 bindDetailEvents：
+   墙是 #detail 的子节点，两边共用一个处理器会让墙上的按钮认错任务 */
+function bindWallEvents() {
+  const wall = $('#panel-wall');
+  if (!wall) return;
+
+  wall.addEventListener('click', async (e) => {
+    const chip = e.target.closest('[data-filter]');
+    if (chip) {
+      if (chip.dataset.filter === state.filter) return;
+      state.filter = chip.dataset.filter;
+      renderWall(true);
+      return;
+    }
+    const card = e.target.closest('.work-card');
+    const actionBtn = e.target.closest('[data-action]');
+    if (actionBtn) {
+      await handleDetailAction(card ? getTask(card.dataset.id) : null, actionBtn.dataset.action, actionBtn);
+      return;
+    }
+    // 点卡片任意位置都进弹层（封面本身是个 button，键盘也能到）
+    if (card) openWorkModal(card.dataset.id);
+  });
+}
+
+/* 弹层在 #detail 之外（fixed 定位放进带 transform 的 .detail-inner 里会踩包含块的坑），
+   所以单独挂一份委托。任务一律从 state.modalId 取，不复用创作台的当前工单 */
+function bindWorkModal() {
+  const mask = $('#work-modal');
+  if (!mask) return;
+
+  mask.addEventListener('click', async (e) => {
+    if (e.target === mask) { closeWorkModal(); return; }   // 点遮罩空白处关闭
+    const closeBtn = e.target.closest('#btn-work-close');
+    if (closeBtn) { closeWorkModal(); return; }
+    const actionBtn = e.target.closest('[data-action]');
+    if (actionBtn) await handleDetailAction(getTask(state.modalId), actionBtn.dataset.action, actionBtn);
+  });
 }
 
 /* ---------------- 新手引导（首启遮罩导览） ---------------- */
@@ -1429,18 +1986,18 @@ const TOUR_STEPS = [
   },
   {
     target: '#btn-new', side: 'bottom',
-    title: '新建片段',
-    text: '每段视频是一个独立片段。可以一次排布多段，各自的模型、时长、画质、画面比例完全独立，互不干扰。',
+    title: '新建工单',
+    text: '创作台一次只配一段：按下它开一张新工单，选好模型、填上提示词与参数，点「开始生成」提交。',
   },
   {
-    target: '#detail', side: 'center',
-    title: '配置与提交',
-    text: '在编辑器里选择模型与生成方式、填写提示词、调整参数；底部会实时预估费用，确认后点「开始生成」。',
+    target: '#panel-studio', side: 'center',
+    title: '创作台',
+    text: '需求在这里下达。选择模型与生成方式、填写提示词、调整参数，底部会实时预估费用，确认后点「开始生成」。',
   },
   {
-    target: '.sidebar', side: 'right',
-    title: '任务队列',
-    text: '提交后在这里跟踪排队与生成进度，可按状态筛选。完成后视频自动下载到本机永久保留，点开卡片即可播放或导出。',
+    target: '[data-tab="wall"]', side: 'right',
+    title: '作品墙',
+    text: '提交后切到这里跟踪排队与生成进度，可按状态筛选。完成后视频自动下载到本机永久保留，点开卡片即可播放或导出。',
   },
 ];
 
@@ -1550,23 +2107,30 @@ function startTour() {
 
 async function boot() {
   applyTheme();
+  mountWall();
   bindGlobal();
+  bindWallEvents();
+  bindWorkModal();
   bindSettings();
   bindDetailEvents();
   try {
-    [state.tasks, state.settings, state.models] = await Promise.all([
+    [state.tasks, state.settings, state.models, state.appInfo] = await Promise.all([
       studio.listTasks(),
       studio.getSettings(),
       studio.listModels(),
+      studio.getAppInfo(),
     ]);
   } catch (err) {
     showToast(err.message, 'error');
   }
-  if (!getTask(state.selectedId) && state.tasks.length) {
-    state.selectedId = state.tasks[0].id;
-  }
-  renderSidebar();
-  renderDetail(true);
+  // 关掉再打开要能找回上一张没提交的工单。failed 不自动载回 ——
+  // 它在作品墙上看得见，要改由用户自己点「重新编辑」
+  const draft = state.tasks.find((t) => t.status === 'draft');
+  state.selectedId = draft ? draft.id : null;
+  state.tab = 'studio';
+  renderTabs();
+  renderStudio(true);
+  renderWall(true);
 
   // 模型目录在线同步：先用内置/缓存目录完成首屏渲染，网络同步异步补齐
   refreshModels();
@@ -1588,12 +2152,16 @@ async function boot() {
 
   studio.onTasksChanged((list) => {
     state.tasks = list;
-    if (!getTask(state.selectedId)) {
-      state.selectedId = state.tasks.length ? state.tasks[0].id : null;
-      state.detailSig = '';
+    // 当前工单被别处删掉/提交掉了才去找新的草稿，绝不主动选中别的任务
+    if (!currentOrder()) {
+      const d = state.tasks.find((t) => t.status === 'draft');
+      if ((d && d.id) !== state.selectedId) {
+        state.selectedId = d ? d.id : null;
+        state.detailSig = '';
+      }
     }
-    renderSidebar();
     renderDetail();
+    renderWorkModal();
   });
 }
 

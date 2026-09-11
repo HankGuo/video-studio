@@ -294,11 +294,103 @@ function createStudio({ port = DEFAULT_PORT, openBrowser = true, reuseExisting =
     fs.createReadStream(file).pipe(res);
   }
 
+  /* ---- 检查更新（GitHub Releases） ----
+     仅做"有没有新版本 + 拿对应平台的下载链接"两件事，不下载不安装不重启。
+     不动文件、不写后台，调用一次就一次的网络往返。
+     失败/超时都通过 fail() 返回给前端做提示，绝不抛 5xx。 */
+  const UPDATE_REPO = { owner: 'HankGuo', name: 'video-studio' };
+  const UPDATE_API_URL = `https://api.github.com/repos/${UPDATE_REPO.owner}/${UPDATE_REPO.name}/releases/latest`;
+
+  // 当前包版本（在 server.js 旁边，require 一份即可）
+  const CURRENT_VERSION = require(path.join(ROOT, 'package.json')).version;
+  const IS_ELECTRON = !!process.versions.electron;
+
+  function parseSemver(tag) {
+    const m = /^v?(\d+)\.(\d+)\.(\d+)/.exec(String(tag || '').trim());
+    return m ? [+m[1], +m[2], +m[3]] : null;
+  }
+  function isNewer(latest, current) {
+    if (!latest || !current) return false;
+    for (let i = 0; i < 3; i++) {
+      if (latest[i] > current[i]) return true;
+      if (latest[i] < current[i]) return false;
+    }
+    return false;
+  }
+  // 按当前平台/架构从 assets 里挑一个最匹配的文件名后缀
+  // 命名约定见 electron-builder.yml 的 artifactName：VideoStudio-${version}-${os}-${arch}.${ext}
+  // win 多了一种 setup（NSIS 安装向导），优先选它
+  function pickAsset(assets) {
+    const platform = process.platform;   // 'darwin' | 'win32' | 'linux'
+    const arch = process.arch;           // 'arm64' | 'x64' | ...
+    const keys = [];
+    if (platform === 'darwin') keys.push(arch === 'arm64' ? 'mac-arm64' : 'mac-x64');
+    else if (platform === 'win32') { keys.push('win-setup'); keys.push('win-x64'); }
+    else if (platform === 'linux') keys.push(arch === 'arm64' ? 'linux-arm64' : 'linux-x86_64');
+    for (const key of keys) {
+      const a = (assets || []).find((x) => x && x.name && x.name.includes(`-${key}.`));
+      if (a) return a;
+    }
+    return null;
+  }
+
+  async function checkUpdate() {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 6000);
+    let release;
+    try {
+      const res = await fetch(UPDATE_API_URL, {
+        signal: ctrl.signal,
+        headers: {
+          'Accept': 'application/vnd.github+json',
+          'User-Agent': `VideoStudio/${CURRENT_VERSION}`,
+        },
+      });
+      if (res.status === 403) {
+        throw new Error('GitHub API 限流（未鉴权 60 次/小时），稍后再试');
+      }
+      if (res.status === 404) {
+        throw new Error('尚未发布任何 Release');
+      }
+      if (!res.ok) throw new Error(`GitHub 返回 HTTP ${res.status}`);
+      release = await res.json();
+    } catch (err) {
+      if (err.name === 'AbortError') throw new Error('检查更新超时（6s），请检查网络');
+      throw err;
+    } finally {
+      clearTimeout(timer);
+    }
+
+    const latestTag = String(release.tag_name || '').replace(/^v/, '');
+    const latest = parseSemver(latestTag);
+    const current = parseSemver(CURRENT_VERSION);
+    const hasUpdate = isNewer(latest, current);
+
+    const asset = pickAsset(release.assets);
+    return {
+      current: CURRENT_VERSION,
+      latest: latestTag,
+      hasUpdate,
+      publishedAt: release.published_at || '',
+      releaseName: release.name || '',
+      releaseNotes: String(release.body || '').slice(0, 4000),
+      releaseUrl: release.html_url || '',
+      // 没有匹配到当前平台的 asset 时，退化到 release 页（让用户自己挑）
+      downloadUrl: asset ? asset.browser_download_url : (release.html_url || ''),
+      fileName: asset ? asset.name : '',
+      fileSize: asset ? asset.size : 0,
+      isElectron: IS_ELECTRON,
+    };
+  }
+
   /* ---- API 路由 ---- */
   const routes = {
     'GET /api/settings': () => settings.get(),
     'PUT /api/settings': (body) => settings.save(body),
     'POST /api/settings/test': (body) => testConnection({ ...settings.get(), ...(body || {}) }),
+
+    'GET /api/app/info': () => ({ version: CURRENT_VERSION, isElectron: IS_ELECTRON }),
+    'GET /api/update/check': () => checkUpdate(),
 
     'GET /api/models': () => listModels(),
     'POST /api/models/sync': () => syncModels(),

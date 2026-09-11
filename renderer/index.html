@@ -27,10 +27,6 @@
       </div>
     </div>
     <div class="topbar-actions">
-      <button id="btn-submit-all" class="btn btn-ghost hidden">
-        <svg viewBox="0 0 24 24"><path d="M4.5 12h13M13 6.5l5.5 5.5-5.5 5.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        提交全部草稿<span id="draft-count" class="draft-count"></span>
-      </button>
       <button id="btn-theme" class="btn btn-ghost btn-icon-only" title="切换主题：夜间 / 日间 / 跟随系统">
         <svg viewBox="0 0 24 24"><path d="M12 3v2M12 19v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M3 12h2M19 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="1.7"/></svg>
       </button>
@@ -46,21 +42,22 @@
       </button>
       <button id="btn-new" class="btn btn-primary">
         <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-        新建片段
+        新建工单
       </button>
     </div>
   </header>
 
   <div class="layout">
-    <aside class="sidebar">
-      <div class="sidebar-head">
-        <span class="sidebar-title">任务队列</span>
-        <span id="queue-count" class="queue-count">0</span>
+    <main id="detail" class="detail">
+      <div class="tabbar" role="tablist" aria-label="主面板">
+        <button type="button" class="tab active" role="tab" id="tab-studio"
+                data-tab="studio" aria-controls="panel-studio" aria-selected="true">创作台</button>
+        <button type="button" class="tab" role="tab" id="tab-wall"
+                data-tab="wall" aria-controls="panel-wall" aria-selected="false">作品墙<span id="tab-count" class="tab-n"></span></button>
       </div>
-      <div id="queue-filters" class="queue-filters"></div>
-      <div id="task-list" class="task-list"></div>
-    </aside>
-    <main id="detail" class="detail"></main>
+      <section id="panel-studio" class="panel" role="tabpanel" aria-labelledby="tab-studio"></section>
+      <section id="panel-wall" class="panel hidden" role="tabpanel" aria-labelledby="tab-wall"></section>
+    </main>
   </div>
 
   <div id="settings-modal" class="modal-mask hidden">
@@ -108,11 +105,34 @@
             <span>无账号、无遥测、代码开源可审计</span>
           </div>
         </div>
+        <div class="about-block">
+          <div class="about-row">
+            <div class="about-meta">
+              <span class="about-label">当前版本</span>
+              <span id="app-version" class="about-value">…</span>
+              <span id="app-channel" class="about-channel"></span>
+            </div>
+            <button id="btn-check-update" class="btn btn-ghost btn-sm">检查更新</button>
+          </div>
+          <div id="update-result" class="update-result"></div>
+        </div>
       </div>
       <footer class="modal-foot">
         <span class="field-hint">保存后立即生效，本地保存在应用数据目录</span>
         <button id="btn-settings-save" class="btn btn-primary">保存设置</button>
       </footer>
+    </div>
+  </div>
+
+  <div id="work-modal" class="modal-mask hidden">
+    <div class="modal modal-wide">
+      <header class="modal-head">
+        <h2 id="work-modal-title">片段详情</h2>
+        <button id="btn-work-close" class="icon-btn" aria-label="关闭">
+          <svg viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        </button>
+      </header>
+      <div id="work-modal-body" class="modal-body"></div>
     </div>
   </div>
 

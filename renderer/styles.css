@@ -288,62 +288,170 @@ body {
   min-height: 0;
 }
 
-.sidebar {
-  width: clamp(310px, 24vw, 392px);
+/* ---------- 主面板 = 创作台 / 作品墙双 tab ---------- */
+
+.tabbar {
+  position: relative;
   flex: none;
   display: flex;
-  flex-direction: column;
-  border-right: 2px solid var(--line);
-  background: var(--paper);
-  min-height: 0;
+  gap: 2px;
+  padding: 0 clamp(22px, 3.2vw, 44px);
+  border-bottom: 1.5px dashed var(--line);
 }
 
-.sidebar-head {
-  display: flex;
+.tab {
+  position: relative;
+  display: inline-flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 15px 18px 10px;
-}
-
-.sidebar-title {
+  gap: 7px;
   font-family: var(--display);
-  font-size: 15px;
+  font-size: 14.5px;
   font-weight: 800;
   letter-spacing: 0.02em;
-  color: var(--ink);
-  text-decoration: underline solid var(--accent) 2px;
-  text-underline-offset: 6px;
+  /* 未选中的 tab 仍是一条通往另一个面板的路，不是装饰文字：
+     --ink-faint 在深浅两套主题下都只有 2.9:1 左右，导航项不该压到那么暗 */
+  color: var(--ink-soft);
+  background: none;
+  border: 0;
+  padding: 15px 13px 13px;
+  cursor: pointer;
+  transition: color 150ms ease;
 }
 
-.queue-count {
+.tab:hover { color: var(--ink); }
+
+.tab.active { color: var(--ink); }
+
+/* 下划线用伪元素压在分隔线上，不参与布局，避免 1.5px 边框对不齐 */
+.tab::after {
+  content: '';
+  position: absolute;
+  left: 11px;
+  right: 11px;
+  bottom: -1.5px;
+  height: 2.5px;
+  border-radius: 2px;
+  background: var(--accent);
+  opacity: 0;
+  transition: opacity 150ms ease;
+}
+
+.tab.active::after { opacity: 1; }
+
+.tab:focus-visible { outline: 2px solid var(--accent); outline-offset: -3px; border-radius: 8px; }
+
+.tab-n {
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   color: var(--ink-soft);
-  background: var(--sticker);
+  background: var(--sticker-2);
   border: 1.5px solid var(--line);
   border-radius: 46% 54% 48% 52% / 52% 48% 54% 46%;
-  min-width: 25px;
-  height: 25px;
+  min-width: 20px;
+  height: 20px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   padding: 0 4px;
 }
 
-/* 队列状态筛选：克制的胶囊组 */
-.queue-filters {
+.tab-n:empty { display: none; }
+
+/* 作品墙的滚动下放到 .wall-scroll（筛选栏不跟着滚），所以它自己不能再滚 */
+.panel {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: clamp(22px, 2.6vw, 34px) clamp(22px, 3.2vw, 44px) 36px;
+}
+
+/* ---------- 作品墙 ---------- */
+
+#panel-wall {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 0;
+}
+
+.wall-head {
+  flex: none;
+  border-bottom: 1.5px dashed var(--line);
+}
+
+/* 与 .wall-scroll / .panel 用同一组水平 padding，保证左右边界对齐 */
+.wall-head-inner {
+  max-width: 1800px;
+  margin: 0 auto;
+  padding: 18px clamp(22px, 3.2vw, 44px) 12px;
+}
+
+.wall-title {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  font-family: var(--display);
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: var(--ink);
+  margin-bottom: 12px;
+}
+
+.wall-sub {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.03em;
+  color: var(--ink-faint);
+}
+
+/* 作品墙状态筛选：克制的胶囊组 */
+.wall-filters {
   display: flex;
   flex-wrap: nowrap;
   gap: 6px;
-  padding: 2px 14px 12px;
-  border-bottom: 1.5px dashed var(--line);
   overflow-x: auto;
   scrollbar-width: none;
 }
 
-.queue-filters::-webkit-scrollbar { display: none; }
+.wall-filters::-webkit-scrollbar { display: none; }
+
+.wall-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 20px clamp(22px, 3.2vw, 44px) 36px;
+}
+
+.work-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(272px, 1fr));
+  gap: 18px;
+}
+
+.wall-empty {
+  max-width: 520px;
+  margin: 9vh auto 0;
+  text-align: center;
+  color: var(--ink-soft);
+}
+
+.wall-empty h3 {
+  font-family: var(--display);
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--ink);
+  margin-bottom: 10px;
+}
+
+.wall-empty p {
+  font-size: 14px;
+  line-height: 1.75;
+  margin-bottom: 20px;
+}
 
 .qchip {
   display: inline-flex;
@@ -378,62 +486,148 @@ body {
   opacity: 0.7;
 }
 
-.queue-empty {
-  padding: 30px 12px;
-  text-align: center;
-  color: var(--ink-faint);
-  font-size: 12.5px;
-}
+/* ---------- 作品卡片 = 贴纸 ---------- */
 
-.task-list {
-  flex: 1;
-  overflow-y: auto;
-  padding: 13px 14px;
-}
-
-/* ---------- 任务卡片 = 贴纸 ---------- */
-
-.task-card {
+.work-card {
   position: relative;
+  display: flex;
+  flex-direction: column;
   background: var(--sticker);
   border: 1.5px solid var(--line);
   border-radius: var(--r-card);
-  padding: 14px 16px;
-  margin-bottom: 12px;
-  cursor: pointer;
+  padding: 10px 11px 12px;
   box-shadow: var(--shadow-sm);
-  transition: transform 150ms ease, box-shadow 150ms ease, border-color 150ms ease, background 150ms ease;
+  transition: transform 150ms ease, box-shadow 150ms ease, border-color 150ms ease;
 }
 
 /* 仅保留极轻微的歪斜，不至于显乱 */
-.task-card:nth-child(odd) { rotate: -0.3deg; }
-.task-card:nth-child(even) { rotate: 0.25deg; }
+.work-card:nth-child(odd) { rotate: -0.3deg; }
+.work-card:nth-child(even) { rotate: 0.25deg; }
 
-.task-card:hover {
+.work-card:hover {
   rotate: 0deg;
   transform: translateY(-2px);
   border-color: var(--line-strong);
   box-shadow: var(--shadow);
 }
 
-.task-card.selected {
-  rotate: 0deg;
+/* 封面本身是按钮：键盘可达，又不会跟卡内的操作按钮形成嵌套交互 */
+.work-cover {
+  position: relative;
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  padding: 0;
+  border: 1.5px solid var(--line);
+  /* 上圆角对齐手撕边的前两个值，别把贴纸的撕口啃掉 */
+  border-radius: 11px 17px 7px 7px;
+  overflow: hidden;
   background: var(--sticker-2);
-  border-color: var(--accent);
-  box-shadow: var(--shadow-accent);
+  cursor: pointer;
 }
 
-.card-top {
+.work-cover video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.work-cover:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.cover-tag {
+  position: absolute;
+  right: 7px;
+  bottom: 7px;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+  background: var(--float-bg);
+  border: 1.5px solid var(--line-strong);
+  border-radius: 5px 8px 4px 7px / 7px 4px 8px 5px;
+  padding: 1px 6px;
+}
+
+/* 生成中：不定量流光。网关只回状态、不给百分比，做不了真实进度条 */
+.cover-skeleton {
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    -45deg,
+    var(--sticker-2) 0 12px,
+    var(--hover) 12px 24px
+  );
+  background-size: 200% 100%;
+  animation: candy 1.6s linear infinite;
+}
+
+.work-cover .running-bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+}
+
+.cover-elapsed {
+  position: absolute;
+  left: 8px;
+  bottom: 11px;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.55);
+}
+
+/* 无封面可抽时的占位：厂商 logo + 状态词，不引入新色 */
+.cover-ph {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  color: var(--ink-faint);
+}
+
+.cover-ph .fam-icon {
+  width: 26px; height: 26px;
+  color: var(--fam, var(--ink-faint));
+  opacity: 0.55;
+}
+
+.cover-ph > svg { width: 24px; height: 24px; opacity: 0.6; }
+
+.cover-ph span {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+
+.work-body { padding: 11px 3px 0; }
+
+.work-top {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  margin-bottom: 5px;
+  margin-bottom: 6px;
 }
 
-.card-model {
+.work-model {
+  display: flex;
+  align-items: center;
+  min-width: 0;
   font-family: var(--mono);
-  font-size: 12.5px;
+  font-size: 12px;
   font-weight: 700;
   color: var(--ink);
   overflow: hidden;
@@ -442,8 +636,10 @@ body {
 }
 
 /* 厂商官方 logo（按家族色着色） */
+.work-model .fam-icon,
 .card-model .fam-icon {
   width: 12.5px; height: 12.5px;
+  flex: none;
   margin-right: 7px;
   vertical-align: -1.5px;
   color: var(--fam, var(--ink-faint));
@@ -455,30 +651,24 @@ body {
 [data-family="kling"]       { --fam: var(--fam-kling); }
 [data-family="happyhorse"]  { --fam: var(--fam-happyhorse); }
 
-.card-prompt {
-  font-size: 13.5px;
+.work-prompt {
+  font-size: 13px;
   color: var(--ink-soft);
-  line-height: 1.55;
+  line-height: 1.5;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
-  min-height: 21px;
-  word-break: break-all;
+  min-height: 20px;
+  /* 提示词里的长 URL / 无空格串不该把卡片撑破 */
+  word-break: break-word;
 }
 
-.card-prompt.empty { color: var(--ink-faint); }
-
-.card-meta {
-  margin-top: 9px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
+.work-prompt.empty { color: var(--ink-faint); }
 
 /* 参数小签：彩色语义，避免一长串点分文字的堆叠感 */
-.card-chips {
+.work-meta {
+  margin-top: 8px;
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
@@ -508,22 +698,27 @@ body {
   color: var(--ink-faint);
 }
 
-.card-actions {
-  display: none;
-  gap: 2px;
-  position: absolute;
-  right: 8px;
-  bottom: 8px;
-  background: var(--float-bg);
-  border: 1.5px solid var(--line-strong);
-  border-radius: var(--r-chip);
-  padding: 2px;
-  box-shadow: var(--shadow);
+.work-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 0 3px;
 }
 
-.task-card:hover .card-actions { display: flex; }
+/* 操作按钮平时收着，hover / 键盘聚焦时才浮出来，卡片本身保持干净 */
+.work-actions {
+  display: flex;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity 150ms ease;
+}
 
-.card-actions .icon-btn { width: 24px; height: 24px; }
+.work-card:hover .work-actions,
+.work-card:focus-within .work-actions { opacity: 1; }
+
+.work-actions .icon-btn { width: 24px; height: 24px; }
 
 /* 进行中条纹：中性墨纹 + 一道哑光青 */
 .running-bar {
@@ -632,16 +827,25 @@ body {
 
 /* ---------- 详情区 ---------- */
 
+/* 只管分区，自己不滚：滚动下放到 .panel，否则 tab 栏会跟着内容一起滚走，
+   还会出现「面板内滚 + 外壳滚」双层滚动条。
+   min-height 不能省：flex 子项默认 min-height:auto，
+   贴边窗口时内容会把这一栏撑高、溢出被 body 裁掉，滚动条根本出不来 */
 .detail {
   flex: 1;
   min-width: 0;
-  overflow-y: auto;
-  padding: clamp(22px, 2.6vw, 34px) clamp(22px, 3.2vw, 44px) 56px;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 0;
 }
 
+/* 上限按 27 英寸屏定：左栏扣掉右栏后还剩约 1230px，提示词一行八十来个汉字。
+   再宽下去（比如让 1fr 无限伸展到 2100px）不是"充分利用空间"，是让行长失控 */
 .detail-inner {
   width: 100%;
-  max-width: 1160px;
+  max-width: 1800px;
   margin: 0 auto;
   animation: detail-in 200ms ease;
 }
@@ -656,12 +860,12 @@ body {
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
-  margin-bottom: 20px;
+  margin-bottom: 14px;
 }
 
 .detail-title {
   font-family: var(--display);
-  font-size: 27px;
+  font-size: 25px;
   font-weight: 800;
   letter-spacing: 0.005em;
   line-height: 1.25;
@@ -681,7 +885,8 @@ body {
 /* ---------- 空状态 ---------- */
 
 .empty-state {
-  max-width: 540px;
+  /* 上限 580px：再宽就要撞上走马灯无缝循环的前提（单份贴纸宽度必须大于栏宽） */
+  max-width: 580px;
   margin: 8vh auto 0;
   text-align: center;
 }
@@ -717,19 +922,19 @@ body {
 
 .empty-state h2 {
   font-family: var(--display);
-  font-size: 30px;
+  font-size: 38px;
   font-weight: 800;
   letter-spacing: 0.005em;
   color: var(--ink);
-  margin-bottom: 9px;
+  margin-bottom: 12px;
 }
 
-.empty-state p { color: var(--ink-soft); margin-bottom: 24px; font-size: 13.5px; }
+.empty-state p { color: var(--ink-soft); margin-bottom: 26px; font-size: 15px; line-height: 1.65; }
 
 .empty-state .empty-hint {
   margin-top: 20px;
   font-family: var(--mono);
-  font-size: 10.5px;
+  font-size: 11.5px;
   letter-spacing: 0.1em;
   color: var(--ink-faint);
 }
@@ -741,20 +946,52 @@ body {
   flex-wrap: wrap;
   justify-content: center;
   gap: 6px 18px;
-  font-size: 11.5px;
+  font-size: 12.5px;
   color: var(--ink-faint);
 }
 
 .empty-trust span { display: inline-flex; align-items: center; gap: 5px; }
 .empty-trust svg { width: 12.5px; height: 12.5px; color: var(--ok); flex: none; }
 
-/* 厂商贴纸条：中性纸面 + 家族色图标 */
+/* 厂商贴纸走马灯：5 个厂商在 540px 栏宽里一行排不下，原本「HappyHorse 阿里」
+   会被挤到第二行独占一行。改成横向匀速循环后孤儿行消失。这些贴纸纯装饰、
+   没有点击行为，所以自动滚动不会干扰操作。 */
 .empty-vendors {
+  margin-top: 22px;
+  padding: 4px 0;                 /* 给贴纸的歪斜与投影留出不被裁掉的余量 */
+  overflow: hidden;
+  /* 两端渐隐，避免贴纸在边缘硬切 */
+  mask-image: linear-gradient(90deg, transparent, #000 14%, #000 86%, transparent);
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 14%, #000 86%, transparent);
+}
+
+.vendor-track {
   display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 8px;
-  margin-top: 26px;
+  width: max-content;
+  animation: vendor-marquee 28s linear infinite;
+}
+
+/* 组间间距做进组内（padding-right），让每份宽度严格相等：
+   轨道宽 = 份数 × 单份宽，位移 1/3 才能精确无缝衔接 */
+.vendor-group { display: flex; gap: 8px; padding-right: 8px; }
+
+/* 悬停暂停，让人能停下来把厂商名读完 */
+.empty-vendors:hover .vendor-track { animation-play-state: paused; }
+
+@keyframes vendor-marquee {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-33.3333%); }
+}
+
+/* 动效降级：不滚动，改为可横向拖动，5 个厂商仍然都够得着 */
+@media (prefers-reduced-motion: reduce) {
+  .vendor-track { animation: none; }
+  .vendor-group[aria-hidden="true"] { display: none; }
+  .empty-vendors {
+    overflow-x: auto;
+    mask-image: none;
+    -webkit-mask-image: none;
+  }
 }
 
 .vendor-chip {
@@ -762,7 +999,7 @@ body {
   align-items: center;
   gap: 7px;
   font-family: var(--sans);
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 600;
   letter-spacing: 0.02em;
   color: var(--ink-soft);
@@ -776,7 +1013,7 @@ body {
 .vendor-chip:nth-child(odd) { rotate: -0.8deg; }
 .vendor-chip:nth-child(even) { rotate: 0.7deg; }
 
-.vendor-chip .fam-icon { width: 12.5px; height: 12.5px; color: var(--fam, var(--ink-faint)); }
+.vendor-chip .fam-icon { width: 14px; height: 14px; color: var(--fam, var(--ink-faint)); }
 
 /* ---------- 编辑器：统一贴纸分区，不再用彩色大色块 ---------- */
 
@@ -784,8 +1021,8 @@ body {
   background: var(--sticker);
   border: 1.5px solid var(--line);
   border-radius: var(--r-panel);
-  padding: 24px 26px;
-  margin-bottom: 18px;
+  padding: 21px 24px;
+  margin-bottom: 16px;
   box-shadow: var(--shadow-sm);
 }
 
@@ -819,6 +1056,154 @@ body {
   gap: 6px;
 }
 
+/* ---------- 编辑器：主从双栏 ---------- */
+
+/* 只考虑 13 英寸及以上：左栏吃掉剩余宽度，右栏给一个随视口微调的定宽控制条。
+   右栏不比 340px 更窄 —— 再窄「画面比例」那排 chip 就要折成三行；
+   也不比 400px 更宽 —— 再宽就是从提示词框嘴里抢地方 */
+.editor-cols {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) clamp(340px, 27vw, 460px);
+  /* 两行必须显式声明：右栏用的是 grid-row: 1 / -1，
+     不写这两行的话负索引落在第 1 行末尾，它根本跨不过去 */
+  grid-template-rows: auto auto;
+  gap: 12px 18px;
+  align-items: start;
+}
+
+.editor-main {
+  grid-column: 1;
+  grid-row: 1;
+  align-self: start;
+  min-width: 0;
+}
+.editor-main > .editor-section { margin-bottom: 12px; }
+.editor-main > .editor-section:last-child { margin-bottom: 0; }
+
+.editor-main .section-label { margin-bottom: 10px; }
+.editor-main .hint { margin-top: 7px; }
+
+/* 素材区接着左栏往下排，只占第一列 —— 右栏跨了两行，那里没有它的位置。
+   让它跨满两栏会把右栏第二行也吞掉，提交条就没地方站了 */
+.editor-cols > .editor-section {
+  grid-column: 1;
+  grid-row: 2;
+  margin-bottom: 0;
+  padding: 12px 20px 14px;
+}
+
+/* 素材卡的标题退一档：真正的分区标题是块内的「首帧图片 / 参考视频」，
+   这一层只是把整块圈起来，不需要 16px 加粗再配一条下划线 */
+.editor-cols > .editor-section .section-label {
+  font-size: 13.5px;
+  margin-bottom: 7px;
+  text-underline-offset: 5px;
+}
+
+.editor-cols > .editor-section .hint { margin-top: 5px; font-size: 11.5px; }
+
+/* 跨满两行再 stretch：右栏因此能长到和左栏 + 素材一样高，
+   提交条靠 margin-top: auto 沉到底，右下角不留空档 */
+.editor-side {
+  grid-column: 2;
+  grid-row: 1 / -1;
+  align-self: stretch;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* 右栏是「控制条」不是「阅读区」：卡片压薄，标题退成表单标签。
+   左栏仍保留 16px 加粗 + 青色下划线的大标题 —— 两边标题不同规格是有意的，
+   它标出的是主次，不是不一致 */
+.editor-side .editor-section {
+  padding: 13px 18px;
+  margin-bottom: 0;
+}
+
+.editor-side .section-label {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  color: var(--ink-faint);
+  text-decoration: none;
+  margin-bottom: 9px;
+}
+
+/* ---------- 参数行：标签在左，控件在右 ---------- */
+
+.param-row {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr);
+  gap: 4px 10px;
+  align-items: center;
+  padding: 6px 0;
+}
+
+.param-row + .param-row { border-top: 1.5px dashed var(--line); }
+
+.param-label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--ink-soft);
+}
+
+.param-note {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--ink-faint);
+}
+
+/* 提示文案挂在控件下方那一列，不占标签列 */
+.param-row .hint { grid-column: 2; margin-top: 0; font-size: 11px; }
+
+/* 右栏的控件比左栏小一号。整栏只有 344px 可用宽，
+   chip 保持左栏那套 padding 会让「时长」的五个档位 + 手动输入直接折行 */
+.editor-side .chip { padding: 5px 11px; font-size: 11.5px; }
+
+.editor-side .chips { gap: 6px; }
+
+.editor-side #f-duration { width: 58px; padding: 5px 8px; }
+
+.editor-side .toggle-row { min-height: 30px; }
+
+.editor-side .segmented { display: flex; }
+
+.editor-side .seg-btn { flex: 1; padding: 6px 8px; font-size: 12px; text-align: center; }
+
+/* 提交条不再横跨整页：它自己那张贴纸卡片取代了原来的底边线，
+   沉在右栏底部，与左栏素材区的底边齐平 */
+.editor-side .editor-foot {
+  margin-top: auto;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+  padding: 12px 18px 13px;
+  background: var(--sticker);
+  border: 1.5px solid var(--line);
+  border-radius: var(--r-panel);
+  box-shadow: var(--shadow-sm);
+}
+
+.editor-side .editor-foot .foot-left {
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.editor-side .editor-foot .foot-actions {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 9px;
+}
+
+.editor-side .editor-foot .foot-actions .btn { justify-content: center; }
+
 .sync-refresh { width: 22px; height: 22px; }
 .sync-refresh svg { width: 12px; height: 12px; }
 
@@ -831,71 +1216,38 @@ body {
 
 /* ---------- 模型选择器 ---------- */
 
-.model-family { margin-bottom: 16px; }
-.model-family:last-child { margin-bottom: 0; }
-
-.model-family-name {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-family: var(--mono);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  color: var(--fam, var(--ink-faint));
-  margin-bottom: 10px;
-}
-
-.model-family-name .fam-icon {
-  width: 13.5px; height: 13.5px;
-  flex: none;
-}
-
-.model-family-name::after {
-  content: "";
-  flex: 1;
-  height: 0;
-  border-top: 1.5px dashed var(--line-strong);
-}
-
-.model-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(248px, 1fr));
-  gap: 14px;
-}
-
-/* 模型卡 = 贴纸：默认三行精华，选中展开 */
-.model-card {
+/* 折叠卡片：当前模型的档位价目 / 简介 / 能力。
+   整块都是热区，「更换模型」只是提示，不必精确点到它 */
+.picker-current {
   position: relative;
+  /* 纵向 flex 而非 block：<button> 的匿名内容盒会垂直居中，block 覆盖不掉 */
+  display: flex;
+  flex-direction: column;
+  width: 100%;
   border: 1.5px solid var(--line);
   border-radius: var(--r-card);
   padding: 15px 17px;
   cursor: pointer;
   background: var(--sticker-2);
   box-shadow: var(--shadow-sm);
-  transition: transform 150ms ease, box-shadow 150ms ease, border-color 150ms ease, background 150ms ease;
+  transition: box-shadow 150ms ease, border-color 150ms ease;
   text-align: left;
   font-family: var(--sans);
   color: var(--ink);
-  display: block;
-  width: 100%;
-  overflow: visible;
 }
 
-.model-card:hover {
-  transform: translateY(-2px);
-  border-color: var(--line-strong);
-  box-shadow: var(--shadow);
-}
+.picker-current:hover { border-color: var(--line-strong); box-shadow: var(--shadow); }
 
-/* 选中 = 青边贴纸 + 中性胶带 */
-.model-card.active {
-  background: var(--sticker-2);
+/* 展开时卡片变成面板的表头：下缘拉平，与列表拼成同一张贴纸 */
+.picker.is-open .picker-current {
   border-color: var(--accent);
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
   box-shadow: var(--shadow-accent);
 }
 
-.model-card.active::before {
+/* 胶带只在展开态出现，标记「这张贴纸正被掀开」 */
+.picker.is-open .picker-current::before {
   content: "";
   position: absolute;
   top: -9px; left: 50%;
@@ -908,19 +1260,40 @@ body {
   z-index: 1;
 }
 
-.model-card-head {
+/* 还没选模型时的引导卡：它是块说明，不是可点的折叠按钮 ——
+   去掉指针与悬停反馈，虚线描边表示「这里还没定下来」。
+   也不贴胶带：胶带的意思是「这张贴纸正被掀开」，不是「这里空着」 */
+.picker-current.is-unset {
+  cursor: default;
+  background: var(--sticker);
+  border-style: dashed;
+}
+
+.picker-current.is-unset:hover { border-color: var(--line); box-shadow: var(--shadow-sm); }
+
+.picker.is-open .picker-current.is-unset::before { content: none; }
+
+.picker-head {
   display: flex;
   align-items: center;
   flex-wrap: nowrap;
-  gap: 8px;
+  gap: 9px;
   min-width: 0;
 }
 
-.model-card-name {
+.picker-icon {
+  display: inline-flex;
+  flex: none;
+  color: var(--fam, var(--ink-faint));
+}
+
+.picker-icon .fam-icon { width: 17px; height: 17px; }
+
+.picker-name {
   flex: 1;
   min-width: 0;
   font-family: var(--display);
-  font-size: 16px;
+  font-size: 17px;
   font-weight: 800;
   letter-spacing: 0.005em;
   color: var(--ink);
@@ -929,15 +1302,193 @@ body {
   white-space: nowrap;
 }
 
-/* 家族色点 */
-.model-card-name::before {
-  content: "";
-  display: inline-block;
+.picker-swap {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--accent-ink);
+}
+
+.caret {
+  width: 0; height: 0;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-top: 5px solid currentColor;
+  transition: transform 180ms ease;
+}
+
+.picker.is-open .caret { transform: rotate(180deg); }
+
+/* 完整档位价目：折叠卡片的存在意义就是让「具体多少钱」一眼可见 */
+.picker-pricing {
+  display: block;
+  margin-top: 8px;
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.005em;
+  color: var(--accent-ink);
+}
+
+.picker-desc {
+  display: block;
+  margin-top: 5px;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--ink-soft);
+}
+
+/* ---------- 展开面板 ---------- */
+
+.picker-panel {
+  border: 1.5px solid var(--accent);
+  border-top: 1.5px dashed var(--line-strong);
+  border-radius: 0 0 18px 16px;
+  background: var(--sticker);
+  box-shadow: var(--shadow-accent);
+}
+
+.picker-search {
+  padding: 10px 12px;
+  border-bottom: 1.5px dashed var(--line-strong);
+}
+
+.picker-search input {
+  width: 100%;
+  font-family: var(--sans);
+  font-size: 13.5px;
+  color: var(--ink);
+  background: var(--sticker-2);
+  border: 1.5px solid var(--line);
+  border-radius: var(--r-btn);
+  padding: 8px 11px;
+}
+
+.picker-search input::placeholder { color: var(--ink-faint); }
+.picker-search input:focus { border-color: var(--accent); }
+
+/* 列表高度跟视口走：它一展开就把编辑器顶出屏幕，矮屏上尤其明显。
+   缩到 34vh 后小屏也能少顶出去一截 */
+.picker-list {
+  max-height: min(320px, 34vh);
+  overflow-y: auto;
+  padding: 6px;
+}
+
+.picker-group-name {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--fam, var(--ink-faint));
+  padding: 9px 9px 5px;
+}
+
+.picker-group-name .fam-icon { width: 12.5px; height: 12.5px; flex: none; }
+
+/* 五栏列对齐（状态点 / 名称 / 时长 / 起价 / 徽章）：
+   列对齐才能横向比价，否则每行都是一段读不完的自由文本 */
+.picker-opt {
+  display: grid;
+  /* 价格列必须容得下 "¥55.44/百万 tokens"（token 计费模型的价目就是有这么长），
+     窄了会溢出到徽章格上；徽章列同理，营销标签字数不定，超出走省略号 */
+  grid-template-columns: 14px minmax(0, 1fr) 76px 126px 78px;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 9px;
+  border: 1.5px solid transparent;
+  border-radius: var(--r-btn);
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  font-family: var(--sans);
+  color: var(--ink);
+  transition: background 120ms ease, border-color 120ms ease;
+}
+
+.picker-opt:hover,
+.picker-opt.is-active {
+  background: var(--hover);
+  border-color: var(--line-strong);
+}
+
+.picker-opt.is-selected {
+  background: var(--sticker-2);
+  border-color: var(--accent);
+}
+
+.opt-dot {
   width: 7px; height: 7px;
   border-radius: 50% 46% 52% 48% / 48% 52% 46% 52%;
-  margin-right: 8px;
-  vertical-align: 1px;
-  background: var(--fam, var(--ink-faint));
+  border: 1.5px solid var(--line-strong);
+}
+
+.picker-opt.is-selected .opt-dot { background: var(--accent); border-color: var(--accent); }
+
+.opt-name {
+  font-size: 13.5px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.opt-dur,
+.opt-price {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-soft);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.opt-price { color: var(--accent-ink); font-weight: 700; }
+
+.opt-badge {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--warn);
+  border: 1px solid rgba(201, 155, 73, 0.4);
+  background: rgba(201, 155, 73, 0.12);
+  border-radius: var(--r-chip);
+  padding: 1px 6px;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.opt-badge:empty { border: none; background: none; padding: 0; }
+
+.picker-empty {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 18px 12px;
+  font-size: 12.5px;
+  color: var(--ink-soft);
+}
+
+/* 焦点环：可以用 border 强化，但不能把 outline 删掉不管 */
+.picker-current:focus-visible,
+.picker-opt:focus-visible,
+.picker-search input:focus-visible,
+.picker-empty .btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .model-badge {
@@ -950,32 +1501,6 @@ body {
   border-radius: var(--r-chip);
   padding: 2px 7px;
   white-space: nowrap;
-}
-
-/* 价签：哑光青 mono */
-.price-line {
-  display: block;
-  margin-top: 7px;
-  font-family: var(--mono);
-  font-size: 17px;
-  font-weight: 800;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: -0.01em;
-  color: var(--accent-ink);
-}
-
-.price-line small {
-  font-size: 10px;
-  font-weight: 500;
-  letter-spacing: 0.04em;
-  color: var(--ink-faint);
-  margin-left: 3px;
-}
-
-.price-line.price-token {
-  font-size: 12.5px;
-  font-weight: 700;
-  color: var(--ink-soft);
 }
 
 /* 贴纸行：中性描边小签，只留语义 */
@@ -1006,41 +1531,6 @@ body {
 .tag-dur   { color: var(--tag-dur-ink); border-color: var(--tag-dur-line); background: var(--tag-dur-bg); }
 .tag-audio { color: var(--tag-aud-ink); border-color: var(--tag-aud-line); background: var(--tag-aud-bg); }
 .tag-mode  { color: var(--ink-faint); }
-
-/* 选中展开：完整价格 + 描述 + 协议 ID，虚线撕开 */
-.model-card-more {
-  display: block;
-  margin-top: 10px;
-  padding-top: 9px;
-  border-top: 1.5px dashed var(--line-strong);
-}
-
-.more-pricing {
-  display: block;
-  font-family: var(--mono);
-  font-size: 10.5px;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  color: var(--ink);
-  line-height: 1.6;
-}
-
-.more-desc {
-  display: block;
-  font-size: 12px;
-  color: var(--ink-soft);
-  line-height: 1.55;
-  margin-top: 4px;
-}
-
-.more-id {
-  display: block;
-  font-family: var(--mono);
-  font-size: 9.5px;
-  letter-spacing: 0.03em;
-  color: var(--ink-faint);
-  margin-top: 5px;
-}
 
 /* ---------- 生成方式 segmented ---------- */
 
@@ -1080,7 +1570,7 @@ body {
 
 textarea.prompt-input {
   width: 100%;
-  min-height: 104px;
+  min-height: 88px;
   resize: vertical;
   font-family: var(--sans);
   font-size: 14px;
@@ -1203,10 +1693,14 @@ input::placeholder { color: var(--ink-faint); }
 
 .media-slot:first-of-type { border-top: none; padding-top: 0; }
 
+/* 160px 而不是 280px：素材区住在高度吃紧的编辑器里，块少排一列就多摞一层。
+   参考生视频有三块（参考图 / 参考视频 / 参考音频），左栏只有 600px 宽，
+   阈值高于 200px 它们就要排两行，整页立刻顶出屏幕。
+   列窄了靠 .media-empty 的 flex-wrap 自己折成两行，不会挤坏 */
 .media-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 0 18px;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 0 16px;
 }
 
 .media-grid .media-slot { border-top: none; padding-top: 2px; }
@@ -1215,7 +1709,7 @@ input::placeholder { color: var(--ink-faint); }
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 9px;
+  margin-bottom: 5px;
 }
 
 .media-slot-title { font-size: 13px; font-weight: 700; color: var(--ink); }
@@ -1252,9 +1746,13 @@ input::placeholder { color: var(--ink-faint); }
   white-space: nowrap;
 }
 
-.media-empty { display: flex; gap: 9px; align-items: center; }
+/* 允许折行：素材块并排后每列可能只有 190px 宽，
+   「选择本地文件」和 URL 输入框在那点宽度里并排不下，折成两行比挤成一条缝强 */
+.media-empty { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 
-.media-empty .url-input { flex: 1; }
+.media-empty .btn { flex: none; }
+
+.media-empty .url-input { flex: 1; min-width: 120px; }
 
 .media-or { font-size: 12px; color: var(--ink-faint); flex: none; }
 
@@ -1317,19 +1815,16 @@ input::placeholder { color: var(--ink-faint); }
 
 /* ---------- 编辑器底部（吸附在视口底部，随时可提交） ---------- */
 
+/* 跟着文档流走，不做 sticky：悬浮底栏会盖住它下面的内容——
+   模型列表展开、参数区第一行都被它遮过。滚到底才出现，不再遮挡任何东西 */
 .editor-foot {
-  position: sticky;
-  bottom: 0;
-  z-index: 10;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  margin: 12px 0 0;
+  margin: 20px 0 0;
   padding: 13px 2px 11px;
   background: var(--foot-bg);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
   border-top: 1.5px solid var(--line);
 }
 
@@ -1571,6 +2066,28 @@ input::placeholder { color: var(--ink-faint); }
   to { opacity: 1; transform: scale(1); }
 }
 
+/* ---------- 作品弹层（放视频，比设置弹窗宽得多） ---------- */
+
+.modal-wide {
+  width: min(1080px, calc(100vw - 96px));
+  max-height: calc(100vh - 72px);
+  display: flex;
+  flex-direction: column;
+}
+
+.modal-wide .modal-body {
+  overflow-y: auto;
+  min-height: 0;
+}
+
+/* playerHtml / progressHtml / readonlyHtml 都是按「占满主面板」写的，
+   搬进弹层要收一档：标题跟弹层自己的标题重复，直接不显示 */
+.modal-wide .detail-inner { max-width: none; }
+.modal-wide .detail-title { display: none; }
+.modal-wide .detail-head { align-items: center; margin-bottom: 12px; }
+.modal-wide .detail-sub { margin-top: 0; }
+.modal-wide .player-frame video { max-height: min(68vh, 720px); }
+
 .modal-head {
   display: flex;
   align-items: center;
@@ -1669,6 +2186,105 @@ input::placeholder { color: var(--ink-faint); }
 .test-result { font-size: 12px; font-family: var(--mono); font-weight: 600; color: var(--ink-soft); }
 .test-result.ok { color: var(--ok); }
 .test-result.bad { color: var(--bad); }
+
+/* ---- 设置模态 · 关于 / 检查更新 ---- */
+.about-block {
+  border-top: 1.5px dashed var(--line);
+  padding-top: 13px;
+  margin-top: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.about-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.about-meta {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  min-width: 0;
+  flex: 1;
+}
+.about-label {
+  font-size: 12px;
+  color: var(--ink-soft);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.about-value {
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink);
+}
+.about-channel {
+  font-size: 11px;
+  color: var(--ink-soft);
+  padding: 1px 7px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  cursor: help;
+  white-space: nowrap;
+}
+.update-result {
+  font-size: 12.5px;
+  color: var(--ink-soft);
+  min-height: 0;
+  line-height: 1.55;
+}
+.update-result:empty { display: none; }
+.update-result.busy { font-family: var(--mono); color: var(--ink-soft); }
+.update-result.ok { color: var(--ok); }
+.update-result.bad { color: var(--bad); }
+.update-result.has-update {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 25%, transparent);
+  border-radius: 8px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.update-headline { font-weight: 600; }
+.update-headline strong { font-family: var(--mono); }
+.update-date { color: var(--ink-soft); font-weight: 400; font-size: 11.5px; margin-left: 4px; }
+.update-notes {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--ink-soft);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 180px;
+  overflow-y: auto;
+  background: var(--bg-soft, transparent);
+  padding: 8px 10px;
+  border-radius: 6px;
+}
+.update-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.update-meta {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--ink-soft);
+}
+.update-meta-link {
+  font-size: 11.5px;
+  color: var(--ink-soft);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  margin-left: auto;
+}
 
 .modal-foot {
   display: flex;

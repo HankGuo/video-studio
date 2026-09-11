@@ -5,7 +5,7 @@ const path = require('path');
 const crypto = require('crypto');
 const { EventEmitter } = require('events');
 const { adapterFor } = require('./protocols');
-const { getModel, findModel, DEFAULT_MODEL } = require('./models');
+const { findModel, DEFAULT_MODEL } = require('./models');
 
 const POLL_MS = 4000;
 const TICK_MS = 1500;
@@ -48,7 +48,10 @@ function sanitizeMedia(media) {
 }
 
 function migrateTask(t) {
-  if (!t.model) t.model = DEFAULT_MODEL;
+  // 只在字段确实缺失时补默认模型（老版本存量数据没有这个字段）。
+  // 空串是「新建了片段但还没选模型」的合法状态，这里若用 !t.model 判断，
+  // 重启一次就会把空壳草稿悄悄补成默认模型，表单自己长出来。
+  if (t.model == null) t.model = DEFAULT_MODEL;
   if (t.media && t.media.refImage && !t.media.refImages) {
     t.media.refImages = [t.media.refImage];
     delete t.media.refImage;
@@ -143,17 +146,22 @@ class TaskManager extends EventEmitter {
   }
 
   create(config) {
-    const model = getModel(config.model);
+    // 用 findModel 而不是 getModel：后者会静默兜底到 DEFAULT_MODEL，
+    // 那样「没传模型」和「传了一个不存在的模型」都会被当成默认模型，未选模型的状态就消失了
+    const model = findModel(config.model);
     const task = {
       id: crypto.randomUUID(),
       remoteId: '',
-      model: model.id,
-      mode: model.modes.includes(config.mode) ? config.mode : model.modes[0],
+      // 空串 = 尚未选定模型。新建片段默认不带模型：表单要等用户选定后才组装出来，
+      // 所以这里只落一张空壳草稿 —— mode/duration/resolution/ratio 等模型相关字段全部留空，
+      // 由 update() 里选定模型时的收敛逻辑统一补全，规则只此一份。
+      model: '',
+      mode: '',
       prompt: String(config.prompt || ''),
-      duration: clampInt(config.duration, model.duration[0], model.duration[1], Math.min(6, model.duration[1])),
-      resolution: model.resolutions.includes(config.resolution) ? config.resolution : defaultResolution(model),
-      ratio: model.ratios.includes(config.ratio) ? config.ratio : (model.ratios.includes('adaptive') ? 'adaptive' : '16:9'),
-      audio: model.audio ? !!config.audio : false,
+      duration: 0,
+      resolution: '',
+      ratio: '',
+      audio: false,
       media: sanitizeMedia(config.media),
       status: 'draft',
       error: '',
@@ -164,6 +172,15 @@ class TaskManager extends EventEmitter {
       updatedAt: now(),
       submittedAt: 0,
     };
+    if (model) {
+      // 创建时就带模型的场景（复制草稿）：按该模型的能力收敛各项配置
+      task.model = model.id;
+      task.mode = model.modes.includes(config.mode) ? config.mode : model.modes[0];
+      task.duration = clampInt(config.duration, model.duration[0], model.duration[1], Math.min(6, model.duration[1]));
+      task.resolution = model.resolutions.includes(config.resolution) ? config.resolution : defaultResolution(model);
+      task.ratio = model.ratios.includes(config.ratio) ? config.ratio : (model.ratios.includes('adaptive') ? 'adaptive' : '16:9');
+      task.audio = model.audio ? !!config.audio : false;
+    }
     this.tasks.unshift(task);
     this._changed();
     return this._public(task);
@@ -174,7 +191,11 @@ class TaskManager extends EventEmitter {
     if (!task) throw new Error('片段不存在');
     if (task.status !== 'draft' && task.status !== 'failed') throw new Error('已提交的片段不能再修改，可复制为新片段');
     if (patch.model && patch.model !== task.model) {
-      const model = getModel(patch.model);
+      // 用 findModel 而不是 getModel：查不到就明确报错，绝不静默换成默认模型 ——
+      // 用户明明选了 A、任务却按 B 生成并按 B 计费，这在界面上完全看不出来。
+      // create / submit 早就是这个口径，这里与它们保持一致
+      const model = findModel(patch.model);
+      if (!model) throw new Error(`模型 ${patch.model} 不在当前模型目录中，请先同步模型目录后再选择`);
       task.model = model.id;
       // 切换模型后把各项配置收敛到新模型支持的范围
       if (!model.modes.includes(task.mode)) task.mode = model.modes[0];
@@ -184,14 +205,19 @@ class TaskManager extends EventEmitter {
       if (!model.audio) task.audio = false;
       task.media = sanitizeMedia(task.media);
     }
-    const model = getModel(task.model);
-    if (patch.mode && model.modes.includes(patch.mode)) task.mode = patch.mode;
+    // 提示词与素材跟模型无关，任何时候都改得动
     if (patch.prompt !== undefined) task.prompt = String(patch.prompt);
-    if (patch.duration !== undefined) task.duration = clampInt(patch.duration, model.duration[0], model.duration[1], task.duration);
-    if (patch.resolution && model.resolutions.includes(patch.resolution)) task.resolution = patch.resolution;
-    if (patch.ratio && model.ratios.includes(patch.ratio)) task.ratio = patch.ratio;
-    if (patch.audio !== undefined && model.audio) task.audio = !!patch.audio;
     if (patch.media !== undefined) task.media = sanitizeMedia(patch.media);
+    // 其余字段都得按模型能力校验。模型查不到时（还没选、或已下线）跳过这些校验，
+    // 而不是拿默认模型的规则去套一个根本不属于它的任务
+    const model = findModel(task.model);
+    if (model) {
+      if (patch.mode && model.modes.includes(patch.mode)) task.mode = patch.mode;
+      if (patch.duration !== undefined) task.duration = clampInt(patch.duration, model.duration[0], model.duration[1], task.duration);
+      if (patch.resolution && model.resolutions.includes(patch.resolution)) task.resolution = patch.resolution;
+      if (patch.ratio && model.ratios.includes(patch.ratio)) task.ratio = patch.ratio;
+      if (patch.audio !== undefined && model.audio) task.audio = !!patch.audio;
+    }
     task.updatedAt = now();
     this._changed();
     return this._public(task);
@@ -231,6 +257,9 @@ class TaskManager extends EventEmitter {
     task.updatedAt = now();
     this._changed();
     try {
+      // 未选模型的空壳草稿没有可提交的内容。放在 try 里走既有错误路径，
+      // 这样批量提交遇到它只标记这一段失败，不会中断后面草稿的提交
+      if (!task.model) throw new Error('请先为该片段选择模型');
       const model = findModel(task.model);
       if (!model) throw new Error(`模型 ${task.model} 已从目录下线，请复制为新片段后重新选择模型`);
       const adapter = adapterFor(model.protocol);
