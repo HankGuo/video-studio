@@ -14,12 +14,24 @@
 
 | 平台 | 下载 | 首次打开 |
 | --- | --- | --- |
-| macOS（Apple 芯片） | [VideoStudio-0.1.0-mac-arm64.zip](https://github.com/HankGuo/video-studio/releases/download/v0.1.0/VideoStudio-0.1.0-mac-arm64.zip) | 右键 → 打开（仅首次） |
+| macOS（Apple 芯片） | [VideoStudio-0.1.0-mac-arm64.zip](https://github.com/HankGuo/video-studio/releases/download/v0.1.0/VideoStudio-0.1.0-mac-arm64.zip) | 首次需执行一次 `xattr`，见下方 |
 | macOS（Intel） | [VideoStudio-0.1.0-mac-x64.zip](https://github.com/HankGuo/video-studio/releases/download/v0.1.0/VideoStudio-0.1.0-mac-x64.zip) | 同上 |
 | Windows | [VideoStudio-0.1.0-win-setup.exe](https://github.com/HankGuo/video-studio/releases/download/v0.1.0/VideoStudio-0.1.0-win-setup.exe)（安装向导）/ [绿色 zip](https://github.com/HankGuo/video-studio/releases/download/v0.1.0/VideoStudio-0.1.0-win-x64.zip) | SmartScreen 提示时点「更多信息 → 仍要运行」 |
 | Linux | [VideoStudio-0.1.0-linux-x86_64.AppImage](https://github.com/HankGuo/video-studio/releases/download/v0.1.0/VideoStudio-0.1.0-linux-x86_64.AppImage)（[arm64 版](https://github.com/HankGuo/video-studio/releases/download/v0.1.0/VideoStudio-0.1.0-linux-arm64.AppImage)） | `chmod +x` 后双击运行 |
 
-macOS 未购买 Apple 开发者证书，安装包为 ad-hoc 签名，首次打开需要右键 → 打开绕过 Gatekeeper；Windows 同理，SmartScreen 会拦一次。
+### macOS 首次打开必读
+
+macOS 包用的是 ad-hoc 签名，没有 Apple 开发者证书、也没做公证（notarization），所以系统一定会拦一次。把 app 拖进「应用程序」后，执行一次这条命令即可：
+
+```bash
+xattr -cr "/Applications/TokenDance 视频接入助手.app"
+```
+
+也可以走图形界面：双击后到「系统设置 → 隐私与安全性」，在底部找到被拦截的提示，点「仍要打开」。
+
+> **不要再用「右键 → 打开」这个老办法。** 它只对「无法验证开发者」有效，对签名损坏的包无效；而且从 macOS 15 起 Apple 已逐步取消这个入口，在新系统上根本不会出现「打开」按钮。这个项目早期的安装包因为构建配置写错（`identity: null` 会让 Electron 跳过签名、在包里留下失效的旧签名），在 macOS 上会被判定为「文件已损坏」并直接扔进废纸篓——那个问题已经修掉，从 v0.1.0 起用的是正确的 ad-hoc 签名。
+
+Windows 包同样没有代码签名证书，首次运行 SmartScreen 会拦一次，点「更多信息 → 仍要运行」即可。
 
 首次启动会引导你填入[词元跳动平台](https://tokendance.space/)的 API Key——在设置里点「一键授权」，浏览器确认后自动完成，全程 PKCE 安全流程。
 
