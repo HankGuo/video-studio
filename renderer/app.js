@@ -537,6 +537,11 @@ function renderStudio(force = false) {
   if (!force && sig === state.detailSig) return;
   state.detailSig = sig;
   box.innerHTML = t ? editorHtml(t) : emptyHtml();
+  // 用 DOM property 设置初始 prompt：避开 innerHTML 注入 + 浏览器解析实体这道弯
+  if (t) {
+    const ta = box.querySelector('textarea[data-prompt-initial]');
+    if (ta) ta.value = t.prompt || '';
+  }
 }
 
 // 老代码里的 renderDetail(true) 现在等价于「重绘创作台 + 同步 tab 与作品墙」。
@@ -1174,7 +1179,9 @@ function editorHtml(t) {
           ${modelSectionHtml(t)}
           <section class="editor-section">
             <span class="section-label">${promptLabel}<span class="section-note" id="prompt-count">${promptLen ? `${promptLen} 字` : ''}</span></span>
-            <textarea class="prompt-input" id="f-prompt" placeholder="${promptPlaceholder}">${escapeHtml(t.prompt)}</textarea>
+            <!-- textarea 不写初始内容：避免用 innerHTML 注入被 escape 后的实体，
+                 改在渲染完成后用 .value 设置（DOM property 不受 HTML 解析影响） -->
+            <textarea class="prompt-input" id="f-prompt" placeholder="${promptPlaceholder}" data-prompt-initial></textarea>
           </section>
         </div>
         <!-- 右栏：调参数。这几组控件都是「看一眼、点一下」的短停留操作，
@@ -1326,7 +1333,10 @@ async function submitOne(id) {
       loadIntoStudio(id);   // 失败了要留在编辑器里改
     } else {
       finishOrder(id);
-      showToast('已提交，开始生成', 'success');
+      // 提交成功就跳到作品墙看进度：用户不点「作品墙」按钮就看不到自己刚提交的东西，
+      // 干等的人很容易以为「是不是卡了？再点一次？」
+      switchTab('wall');
+      showToast('已提交，去作品墙看进度', 'success');
     }
   } catch (err) {
     showToast(err.message, 'error');
@@ -1365,17 +1375,23 @@ async function handleDetailAction(t, action, btn) {
         const problem = validateForSubmit(fresh);
         if (problem) {
           showToast(problem, 'error');
+          loadIntoStudio(t.id);  // 跟 Cmd+Enter 走 submitOne 行为对齐：出错就回编辑器改
           return;
         }
         const submitted = await studio.submitTask(t.id);
         mergeTask(submitted);
-        if (submitted.status === 'failed') showToast(submitted.error || '提交失败', 'error');
-        else {
+        if (submitted.status === 'failed') {
+          showToast(submitted.error || '提交失败', 'error');
+          loadIntoStudio(t.id);
+        } else {
           finishOrder(t.id);
-          showToast('已提交，开始生成', 'success');
+          // 提交成功跳到作品墙：避免「以为没反应再点一次」
+          switchTab('wall');
+          showToast('已提交，去作品墙看进度', 'success');
         }
       } catch (err) {
         showToast(err.message, 'error');
+        loadIntoStudio(t.id);
       } finally {
         btn.disabled = false;
       }
@@ -1661,6 +1677,11 @@ function setOauthUI(busy) {
   btn.disabled = false; // 授权中再点一次 = 取消
   btn.classList.toggle('oauth-pending', busy);
   $('#oauth-btn-text').textContent = busy ? '等待浏览器授权…（点击取消）' : '一键授权，自动填入 Key';
+  // 授权中不允许关弹层：关掉就拿不到 Key，用户还以为在等 —— 静默取消太坑
+  const closeBtn = $('#btn-settings-close');
+  if (closeBtn) closeBtn.disabled = !!busy;
+  const mask = $('#settings-modal');
+  if (mask) mask.classList.toggle('oauth-locked', !!busy);
 }
 
 async function openSettings() {
@@ -1698,10 +1719,9 @@ function paintAppVersion() {
 }
 
 function closeSettings() {
-  if (oauthBusy) {
-    studio.cancelConnect().catch(() => {});
-    setOauthUI(false);
-  }
+  // OAuth 授权进行中不允许关闭：关掉就拿不到 Key，且让用户误以为在等
+  // UI 上关闭按钮 + 遮罩点击都被禁（.oauth-locked 类 + closeBtn.disabled）
+  if (oauthBusy) return;
   $('#settings-modal').classList.add('hidden');
   // 首启流程：设置关闭后接力新手引导
   if (tourPending) {
@@ -2151,7 +2171,18 @@ async function boot() {
   }
 
   studio.onTasksChanged((list) => {
-    state.tasks = list;
+    // 按 id 合并而不是直接整片替换：避免把刚 scheduleSave 但还没发出去的本地编辑覆盖掉
+    const liveIds = new Set();
+    for (const incoming of list) {
+      liveIds.add(incoming.id);
+      const i = state.tasks.findIndex((t) => t.id === incoming.id);
+      if (i >= 0) state.tasks[i] = incoming;
+      else state.tasks.unshift(incoming);
+    }
+    // 服务端已删除的任务也清掉（删除走的是同一通道）
+    if (state.tasks.length !== liveIds.size) {
+      state.tasks = state.tasks.filter((t) => liveIds.has(t.id));
+    }
     // 当前工单被别处删掉/提交掉了才去找新的草稿，绝不主动选中别的任务
     if (!currentOrder()) {
       const d = state.tasks.find((t) => t.status === 'draft');

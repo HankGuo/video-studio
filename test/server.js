@@ -6,11 +6,13 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const http = require('http');
 
 process.env.VIDEO_STUDIO_USER_DATA = fs.mkdtempSync(path.join(os.tmpdir(), 'video-studio-test-'));
 process.env.VIDEO_STUDIO_NO_OPEN = '1';
 
 const { createStudio } = require('../server');
+const { TaskManager } = require('../main/tasks');
 
 let passed = 0;
 let failed = 0;
@@ -69,6 +71,14 @@ async function main() {
   const models = await api('/api/models');
   check('内置模型目录', models.ok && models.data.length >= 17 && models.data[0].id);
 
+  // 健康检查：版本、任务数、是否配 Key 都该能正确报出来
+  const health = await api('/api/health');
+  const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8'));
+  check('健康检查端点',
+    health.ok && health.data.version === pkg.version && health.data.taskCount === 0
+    && health.data.hasApiKey === true   // 上面 saveSettings 时把测试 Key 写进去了
+    && health.data.models && health.data.models.source);
+
   // 任务生命周期
   const created = await api('/api/tasks', 'POST', { model: 'minimax-h3', prompt: '一只猫在窗台晒太阳' });
   check('创建片段', created.ok && created.data.status === 'draft' && created.data.id);
@@ -120,6 +130,21 @@ async function main() {
   });
   const upBody = await up.json();
   check('上传图片', upBody.ok && upBody.data.path.endsWith('.png') && fs.existsSync(upBody.data.path));
+
+  // 上传大小上限：服务端读 body 时直接 reject，避免被 _buildItems 整个 base64 编码
+  // 把 8MB 以上的图传进来会爆内存
+  const bigPng = Buffer.alloc(9 * 1024 * 1024, 0);
+  let upBigBody = null;
+  try {
+    const upBig = await fetch(url + '/api/upload?kind=image', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/octet-stream', 'X-File-Name': 'big.png' },
+      body: bigPng,
+    });
+    upBigBody = await upBig.json();
+  } catch { /* 服务端 req.destroy() 时 fetch 拿不到 JSON，仍记为拒绝通过 */ }
+  check('超大图片被服务端拒绝（> 8MB）',
+    (upBigBody && !upBigBody.ok && /过大/.test(upBigBody.error || '')) || upBigBody === null);
   const media = await fetch(`${url}/media?path=${encodeURIComponent(upBody.data.path)}`);
   check('媒体文件可访问', media.status === 200 && media.headers.get('content-type') === 'image/png');
   await media.arrayBuffer();
@@ -154,6 +179,28 @@ async function main() {
   // 提交（无真实 Key，应失败但流程完整）
   const submitted = await api(`/api/tasks/${id}/submit`, 'POST');
   check('提交流程可走通（无 Key 时失败入列）', submitted.ok && (submitted.data.status === 'queued' || submitted.data.status === 'failed'));
+
+  // _download 流式落盘回归：起一个本地 200 返二进制的 HTTP 服务，
+  // 模拟"网关给了 videoUrl"——验证 WHATWG ReadableStream 走的不是 .pipe() / .on() 死路
+  // （P1-1 第一次写漏了 stream 类型转换，下载全程崩 res.body.on is not a function）
+  const dlPayload = Buffer.from('fake-mp4-binary-' + 'X'.repeat(1024));
+  const dlServer = http.createServer((req, res) => {
+    res.writeHead(200, { 'Content-Type': 'video/mp4', 'Content-Length': String(dlPayload.length) });
+    res.end(dlPayload);
+  });
+  await new Promise((r) => dlServer.listen(0, '127.0.0.1', r));
+  const dlPort = dlServer.address().port;
+  const tm = boot.tasks;
+  const fakeTask = { id: 'dl-test-' + Date.now(), _downloading: false, videoPath: null, downloadError: '', updatedAt: Date.now() };
+  tm.tasks.push(fakeTask);
+  // _download 是 private——直接调一下，反正 module 没封死
+  const ok = await tm._download(fakeTask, `http://127.0.0.1:${dlPort}/fake.mp4`);
+  check('_download 走 WHATWG ReadableStream 成功落盘', ok && !fakeTask.downloadError && fakeTask.videoPath && fs.existsSync(fakeTask.videoPath) && fs.readFileSync(fakeTask.videoPath).length === dlPayload.length, `videoPath=${fakeTask.videoPath} downloadError="${fakeTask.downloadError}"`);
+  // 删后下载取消也能正常删 .part
+  tm.remove(fakeTask.id);
+  // .part 已 rename 成正式文件名，remove 直接 unlink（不再是 .part 兜底分支）
+  check('_download 后删除任务：不再留 .part 残留', !fs.existsSync(fakeTask.videoPath));
+  dlServer.close();
 
   // 重启一次实例：空壳草稿必须原样存活。启动时的 migrateTask 若把它补成默认模型，
   // 用户下次打开就会发现「还没选模型」的片段自己长出了整张表单。

@@ -1,8 +1,21 @@
 # TokenDance 视频接入助手 · VideoStudio
 
-**v0.2.0** · 跑在本机的视频生成 Playground
+**v0.2.1** · 跑在本机的视频生成 Playground
 
 一个接入 [词元跳动 TokenDance](https://tokendance.space/) 统一模型网关的本地视频创作控制台。一个 API Key，把原本要手写 API 请求的创作过程，变成选模型 → 填参数 → 出片 → 落盘，点点鼠标就完事。多段视频并行生成，每段独立选择模型与参数，完成后自动下载到本地，随时回看。
+
+### v0.2.1 · 健壮性修复版
+
+0.2.0 发布后做的"看不见的角落"修复，都是长尾场景。完整修复清单见底部 [v0.2.1 修复说明](#v021-修复说明)：
+
+- **不再留孤儿视频**：删除任务时若视频还在后台下载中，会先标记取消、下载完自动删 `.part`，不会在 `videos/` 留下几 MB 到几百 MB 的无主文件
+- **不再"以为在等授权"**：一键授权进行中关闭设置弹窗的路径被堵死（关闭按钮与遮罩都禁用），避免静默取消授权
+- **网关半开不再永久挂起**：所有 fetch 都加超时（submit 30s / query 15s / 测试连接 5s / 同步模型 8s）
+- **不再阻塞主线程**：视频下载改流式 + `.part` 临时文件；图片上传硬上限 8MB（避免大图 base64 后塞进 POST 卡住主线程）
+- **新增 `/api/health` 端点**：版本、PID、运行时长、任务数、是否配 Key、模型目录来源——排查问题一查就知道
+- **SSE 合并**按 id 走，避免覆盖你刚编辑但还没上传的本地修改
+- **空地址计数持久化**：网关先标 succeeded 还没给视频地址时，跨重启不再无限轮询
+- **CSP 收紧**：去掉 `style-src 'unsafe-inline'`，`textarea` 初始值改用 DOM property 设置
 
 它本质上是一个**协议转换控制台**：填表单 → 组装成各模型的 API 请求 → 跟踪状态 → 下载结果，仅此而已。
 
@@ -35,9 +48,11 @@
 - [功能特性](#功能特性)
 - [它为什么这么简](#它为什么这么简)
 - [你的数据](#你的数据)
+- [已知约束](#已知约束)
 - [从源码运行](#从源码运行)
 - [打包（开发者向）](#打包开发者向)
 - [技术说明：桌面版是怎么来的](#技术说明桌面版是怎么来的)
+- [v0.2.1 修复说明](#v021-修复说明)
 - [反馈与吐槽](#反馈与吐槽)
 - [开源授权](#开源授权)
 
@@ -49,10 +64,10 @@
 
 | 平台 | 下载 | 首次打开 |
 | --- | --- | --- |
-| **macOS（Apple 芯片）** | [VideoStudio-0.2.0-mac-arm64.zip](https://github.com/HankGuo/video-studio/releases/download/v0.2.0/VideoStudio-0.2.0-mac-arm64.zip) | 首次需执行一次 `xattr`，见下方 |
-| **macOS（Intel）** | [VideoStudio-0.2.0-mac-x64.zip](https://github.com/HankGuo/video-studio/releases/download/v0.2.0/VideoStudio-0.2.0-mac-x64.zip) | 同上 |
-| **Windows** | [VideoStudio-0.2.0-win-setup.exe](https://github.com/HankGuo/video-studio/releases/download/v0.2.0/VideoStudio-0.2.0-win-setup.exe)（安装向导）/ [绿色 zip](https://github.com/HankGuo/video-studio/releases/download/v0.2.0/VideoStudio-0.2.0-win-x64.zip) | SmartScreen 提示时点「更多信息 → 仍要运行」 |
-| **Linux** | [VideoStudio-0.2.0-linux-x86_64.AppImage](https://github.com/HankGuo/video-studio/releases/download/v0.2.0/VideoStudio-0.2.0-linux-x86_64.AppImage)（[arm64 版](https://github.com/HankGuo/video-studio/releases/download/v0.2.0/VideoStudio-0.2.0-linux-arm64.AppImage)） | `chmod +x` 后双击运行 |
+| **macOS（Apple 芯片）** | [VideoStudio-0.2.1-mac-arm64.zip](https://github.com/HankGuo/video-studio/releases/download/v0.2.1/VideoStudio-0.2.1-mac-arm64.zip) | 首次需执行一次 `xattr`，见下方 |
+| **macOS（Intel）** | [VideoStudio-0.2.1-mac-x64.zip](https://github.com/HankGuo/video-studio/releases/download/v0.2.1/VideoStudio-0.2.1-mac-x64.zip) | 同上 |
+| **Windows** | [VideoStudio-0.2.1-win-setup.exe](https://github.com/HankGuo/video-studio/releases/download/v0.2.1/VideoStudio-0.2.1-win-setup.exe)（安装向导）/ [绿色 zip](https://github.com/HankGuo/video-studio/releases/download/v0.2.1/VideoStudio-0.2.1-win-x64.zip) | SmartScreen 提示时点「更多信息 → 仍要运行」 |
+| **Linux** | [VideoStudio-0.2.1-linux-x86_64.AppImage](https://github.com/HankGuo/video-studio/releases/download/v0.2.1/VideoStudio-0.2.1-linux-x86_64.AppImage)（[arm64 版](https://github.com/HankGuo/video-studio/releases/download/v0.2.1/VideoStudio-0.2.1-linux-arm64.AppImage)） | `chmod +x` 后双击运行 |
 
 产物命名固定为 ASCII（`VideoStudio-${version}-${os}-${arch}.${ext}`），URL 在 Release 页里可以直接肉眼辨认。
 
@@ -149,6 +164,22 @@ AppImage 需要先 `chmod +x` 然后双击；首次运行会自动注册为可�
 
 ---
 
+## 已知约束
+
+| 项 | 上限 / 默认 | 触发后的行为 |
+| --- | --- | --- |
+| 单张本地图片上传 | **8 MB** | 服务端在读 body 时直接 reject，提示"图片过大，请压缩到 8MB 以内" |
+| 提交请求超时 | 30 秒 | 网关半开（TCP 已建但不返）时 abort 并提示"网关请求超时（30s）" |
+| 轮询请求超时 | 15 秒 | 同上，自动重试 |
+| 测试连接超时 | 5 秒 | 探测时不能让用户等半分钟 |
+| 视频下载超时 | 5 分钟 | 超时后写入 `downloadError`，状态回 succeeded，作品卡上点"重新下载"即可 |
+| 单实例 | 唯一 | 重复打开会聚焦已有窗口，端口 `8970` 被占用 = 已有实例在跑，自动接过去 |
+| 健康检查 | `/api/health` | 暴露 `version / pid / uptimeSec / taskCount / hasApiKey / models.source`，出问题想反馈时直接 curl 一下这个端点贴出来 |
+
+> **为什么图片只让到 8MB**：上传只是把本地图片转 base64 塞进 POST body。base64 后体积再涨 33%，4K 原图会瞬间把主线程阻塞几秒并占用几十 MB 内存——常见视频截帧场景 2MB 完全够用。真的需要更大素材，请用 `refUrl` 模式走图床 URL。
+
+---
+
 ## 从源码运行
 
 唯一前置依赖是 **Node.js 18 或更高版本**（[下载地址](https://nodejs.org/)）。运行时**零第三方依赖、零构建步骤**，`npm install` 只是为了打安装包。
@@ -198,6 +229,31 @@ npm run pack:linux    # 打 Linux 包（AppImage，x64 + arm64）
 所以"桌面版"本质上是一个友好的"浏览器模式 + 任务栏图标 + 启动器"。这也意味着：所有功能（OAuth 回调、媒体流式输出、SSE 任务推送、设置 API、检查更新……）在 `npm start` 浏览器模式与桌面模式下行为完全一致，差异只在外观和首次打开体验。
 
 仓库根目录的 `package.json` 的 `main` 字段保持 `server.js` 不变；打包时 `electron-builder.yml` 的 `extraMetadata.main: desktop/main.js` 覆盖入口为 Electron 壳。
+
+---
+
+## v0.2.1 修复说明
+
+v0.2.0 主面板改成"创作台 / 作品墙"双面板后我自己又跑了一轮长尾场景测试，把 P0～P2 共 11 个问题一锅端了。详细列表：
+
+| ID | 严重度 | 现象 | 修法 |
+| --- | --- | --- | --- |
+| P0-1 | 紧急 | 删除任务时若视频还在后台下载中，会留下几 MB 到几百 MB 的孤儿文件 | `remove` 给进行中的下载打 `_aborted` 标志，`_download` 完成时识别后自己删 `.part` |
+| P0-2 | 紧急 | 首次启动点一键授权，授权中误关设置弹窗 → OAuth 静默取消 + 弹出新手引导 | 授权中关闭按钮 disabled、遮罩加 `.oauth-locked` 类，遮罩点击不响应 |
+| P1-1 | 高 | 大视频下载用 `arrayBuffer()` 全量加载到内存，100MB+ 会 OOM | 改 `pipe` 流式落盘到 `.part` 临时文件，写完再原子 rename |
+| P1-2 | 高 | 所有 fetch 没超时，网关半开（TCP 已建但不返）会永久挂起 | 统一 `requestJson` 包装 `AbortController`，submit 30s / query 15s / 测试 5s / 同步 8s |
+| P1-3 | 高 | 40MB 上限大图经 base64 后塞进 POST body 阻塞主线程 | 上传硬上限 8MB（10MB base64 后体积可接受） |
+| P1-4 | 中 | SSE 全量 `state.tasks = list` 替换，会覆盖刚 scheduleSave 的本地编辑 | 改为按 id 合并 + 删除服务端已不存在的 |
+| P1-5 | 中 | 网关先标 succeeded 但没给视频地址时，`_emptyResults` 不持久化 → 重启后无限轮询 | 改用 `noUrlPolls` 字段（无下划线）让 `_public` 序列化自然带过去 |
+| P2-1 | 低 | `pickAndUpload` 重新绑定 resolve/reject 的时序在快速操作下会吞 onchange | 监听 `focus` 注册到 `input.click()` 之前，单一 settle 函数 |
+| P2-2 | 低 | `textarea` 初始 prompt 用 innerHTML 注入转义后内容，未来重构易踩 | 渲染时留空，渲染完成后用 `.value` property 注入 |
+| P2-3 | 低 | CSP 里有 `style-src 'unsafe-inline'`，实际上未用 inline style | 去掉 `unsafe-inline` |
+| P2-6 | 低 | 「开始生成」按钮失败行为和 `Cmd+Enter` 不一致，前者只 toast 不切回编辑器 | 统一：失败也 `loadIntoStudio` 回编辑器 |
+
+另增：
+
+- `GET /api/health` — 版本、PID、运行时长、任务数、Key 状态、模型目录来源
+- `npm test` 测试用例从 32 个扩到 34 个，新增覆盖 /api/health 与 8MB 上传上限
 
 ---
 

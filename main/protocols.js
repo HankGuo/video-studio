@@ -19,14 +19,30 @@ function joinUrl(base, suffix) {
   return String(base || '').replace(/\/+$/, '') + suffix;
 }
 
-async function requestJson(settings, method, path, body, extraHeaders) {
+async function requestJson(settings, method, path, body, extraHeaders, timeoutMs) {
   const headers = { Authorization: `Bearer ${settings.apiKey}`, 'X-App-URL': APP_URL, ...(extraHeaders || {}) };
   if (body !== undefined) headers['Content-Type'] = 'application/json';
-  const res = await fetch(joinUrl(settings.endpoint, path), {
-    method,
-    headers,
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-  });
+  // 默认 30s：避免网关半开（TCP 已建但不返）时把 submit / query 永久挂起
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs || 30000);
+  let res;
+  try {
+    res = await fetch(joinUrl(settings.endpoint, path), {
+      method,
+      headers,
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+      signal: ctrl.signal,
+    });
+  } catch (err) {
+    if (err.name === 'AbortError') {
+      const e = new Error(`网关请求超时（${Math.round((timeoutMs || 30000) / 1000)}s），请检查网络或稍后重试`);
+      e.httpStatus = 0;
+      throw e;
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
   const text = await res.text();
   let data = null;
   try { data = text ? JSON.parse(text) : null; } catch { data = null; }
@@ -100,7 +116,7 @@ const ADAPTERS = {
       return data.task_id;
     },
     async query(settings, remoteId) {
-      const data = await requestJson(settings, 'GET', `/gateway/minimax/v2/query/video_generation/${encodeURIComponent(remoteId)}`);
+      const data = await requestJson(settings, 'GET', `/gateway/minimax/v2/query/video_generation/${encodeURIComponent(remoteId)}`, undefined, undefined, 15000);
       const t = data && data.task;
       if (!t) throw new Error('网关响应中缺少 task 字段');
       return {
@@ -140,7 +156,7 @@ const ADAPTERS = {
       return id;
     },
     async query(settings, remoteId) {
-      const data = await requestJson(settings, 'GET', `/gateway/ark/v3/generations/tasks/${encodeURIComponent(remoteId)}`);
+      const data = await requestJson(settings, 'GET', `/gateway/ark/v3/generations/tasks/${encodeURIComponent(remoteId)}`, undefined, undefined, 15000);
       return {
         status: data.status,
         videoUrl: data.content && data.content.video_url ? data.content.video_url : '',
@@ -173,7 +189,7 @@ const ADAPTERS = {
       return id;
     },
     async query(settings, remoteId) {
-      const data = await requestJson(settings, 'GET', `/gateway/alibaba/wan3/v1/tasks/${encodeURIComponent(remoteId)}`);
+      const data = await requestJson(settings, 'GET', `/gateway/alibaba/wan3/v1/tasks/${encodeURIComponent(remoteId)}`, undefined, undefined, 15000);
       const out = (data && data.output) || {};
       return {
         status: normalizeDashscope(out.task_status),
@@ -210,7 +226,7 @@ const ADAPTERS = {
       return id;
     },
     async query(settings, remoteId) {
-      const data = await requestJson(settings, 'GET', `/gateway/alibaba/happyhorse/v1/tasks/${encodeURIComponent(remoteId)}`);
+      const data = await requestJson(settings, 'GET', `/gateway/alibaba/happyhorse/v1/tasks/${encodeURIComponent(remoteId)}`, undefined, undefined, 15000);
       const out = (data && data.output) || {};
       return {
         status: normalizeDashscope(out.task_status),
@@ -252,7 +268,7 @@ const ADAPTERS = {
     },
     async query(settings, remoteId, task) {
       const path = ADAPTERS.kling.pathFor(task || { mode: 'text' });
-      const data = await requestJson(settings, 'GET', `/gateway/kling/v1/${path}/${encodeURIComponent(remoteId)}`);
+      const data = await requestJson(settings, 'GET', `/gateway/kling/v1/${path}/${encodeURIComponent(remoteId)}`, undefined, undefined, 15000);
       return klingResult(data);
     },
   },
@@ -292,7 +308,7 @@ const ADAPTERS = {
       return id;
     },
     async query(settings, remoteId) {
-      const data = await requestJson(settings, 'GET', `/gateway/kling/v1/omni-video/${encodeURIComponent(remoteId)}`);
+      const data = await requestJson(settings, 'GET', `/gateway/kling/v1/omni-video/${encodeURIComponent(remoteId)}`, undefined, undefined, 15000);
       return klingResult(data);
     },
   },
@@ -321,7 +337,7 @@ function adapterFor(protocol) {
 async function testConnection(settings) {
   if (!settings.endpoint || !settings.apiKey) return { ok: false, message: '请填写接入点与 API Key' };
   try {
-    await requestJson(settings, 'GET', '/gateway/minimax/v2/query/video_generation/__connection_test__');
+    await requestJson(settings, 'GET', '/gateway/minimax/v2/query/video_generation/__connection_test__', undefined, undefined, 5000);
     return { ok: true, message: '连接正常，密钥有效' };
   } catch (err) {
     if (err.httpStatus === 404) return { ok: true, message: '连接正常，密钥有效' };

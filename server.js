@@ -21,7 +21,9 @@ const { startAuthorization } = require('./main/oauth');
 const ROOT = __dirname;
 const RENDERER_DIR = path.join(ROOT, 'renderer');
 const DEFAULT_PORT = 8970;
-const MAX_UPLOAD_BYTES = 40 * 1024 * 1024; // 图片上传上限 40MB
+// 上传只用于本地参考图：8MB 足够大多数视频截帧场景，
+// 同时把 _buildItems 里 base64 编码后的体积压在 ~10MB 以内，避免大文件长时间阻塞主线程
+const MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
 
 /* ---------------- 数据目录（沿用各平台惯例，macOS 与 Electron 版同路径） ---------------- */
 
@@ -166,9 +168,13 @@ function createStudio({ port = DEFAULT_PORT, openBrowser = true, reuseExisting =
 
   /* ---- 模型目录在线同步（公开接口，匿名访问） ---- */
   const modelsCacheFile = path.join(store, 'models-cache.json');
+  const state = { modelSync: { source: 'builtin', syncedAt: 0 } };
   try {
     const cached = JSON.parse(fs.readFileSync(modelsCacheFile, 'utf8'));
-    if (Array.isArray(cached.models)) setRemoteCache(cached.models);
+    if (Array.isArray(cached.models)) {
+      setRemoteCache(cached.models);
+      state.modelSync = { source: 'cache', syncedAt: cached.syncedAt || 0 };
+    }
   } catch { /* 无缓存，使用内置目录 */ }
 
   async function syncModels() {
@@ -183,11 +189,14 @@ function createStudio({ port = DEFAULT_PORT, openBrowser = true, reuseExisting =
       if (!data || !Array.isArray(data.data)) throw new Error('模型列表格式异常');
       setRemoteCache(data.data);
       const syncedAt = Date.now();
+      state.modelSync = { source: 'remote', syncedAt };
       fs.writeFileSync(modelsCacheFile, JSON.stringify({ syncedAt, models: data.data }));
       return { models: listModels(), syncedAt, source: 'remote' };
     } catch (err) {
       const hasCache = !!fs.existsSync(modelsCacheFile);
-      return { models: listModels(), syncedAt: 0, source: hasCache ? 'cache' : 'builtin', error: err.message };
+      const source = hasCache ? 'cache' : 'builtin';
+      state.modelSync = { source, syncedAt: 0 };
+      return { models: listModels(), syncedAt: 0, source, error: err.message };
     }
   }
 
@@ -390,6 +399,14 @@ function createStudio({ port = DEFAULT_PORT, openBrowser = true, reuseExisting =
     'POST /api/settings/test': (body) => testConnection({ ...settings.get(), ...(body || {}) }),
 
     'GET /api/app/info': () => ({ version: CURRENT_VERSION, isElectron: IS_ELECTRON }),
+    'GET /api/health': () => ({
+      version: CURRENT_VERSION,
+      pid: process.pid,
+      uptimeSec: Math.round(process.uptime()),
+      taskCount: tasks.list().length,
+      hasApiKey: !!settings.get().apiKey,
+      models: { source: state.modelSync.source, syncedAt: state.modelSync.syncedAt },
+    }),
     'GET /api/update/check': () => checkUpdate(),
 
     'GET /api/models': () => listModels(),

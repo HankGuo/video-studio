@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { EventEmitter } = require('events');
+const { Readable } = require('stream');
 const { adapterFor } = require('./protocols');
 const { findModel, DEFAULT_MODEL } = require('./models');
 
@@ -242,7 +243,11 @@ class TaskManager extends EventEmitter {
     const idx = this.tasks.findIndex((t) => t.id === id);
     if (idx === -1) return;
     const [task] = this.tasks.splice(idx, 1);
-    if (task.videoPath) {
+    // 任务已从列表里清掉，但 _download 还在进行中：标记 _aborted，
+    // _download 写完时检查这个标志自己删自己 —— 避免下载完才出现的孤儿文件
+    if (task._downloading) {
+      task._aborted = true;
+    } else if (task.videoPath) {
       try { fs.unlinkSync(task.videoPath); } catch { /* 文件可能已不存在 */ }
     }
     this._changed();
@@ -386,9 +391,10 @@ class TaskManager extends EventEmitter {
       dirty = true;
     } else if (status === 'succeeded') {
       // 网关可能先返回 succeeded、稍后才给出视频地址：没有地址时继续轮询几次
+      // 计数用 noUrlPolls（无下划线）让它自然进入 tasks.json，重启不丢
       if (!remote.videoUrl && !task.videoUrl) {
-        task._emptyResults = (task._emptyResults || 0) + 1;
-        if (task._emptyResults <= 6) {
+        task.noUrlPolls = (task.noUrlPolls || 0) + 1;
+        if (task.noUrlPolls <= 6) {
           task._nextPoll = now() + POLL_MS;
           return;
         }
@@ -400,6 +406,7 @@ class TaskManager extends EventEmitter {
       }
       if (remote.videoUrl && remote.videoUrl !== task.videoUrl) {
         task.videoUrl = remote.videoUrl;
+        task.noUrlPolls = 0;
         dirty = true;
       }
       if (task.status !== 'succeeded') {
@@ -422,30 +429,51 @@ class TaskManager extends EventEmitter {
   async _download(task, url) {
     if (task._downloading) return false;
     task._downloading = true;
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 5 * 60 * 1000); // 大文件最多下 5 分钟
+    // 先写到 .part 临时文件：意外中断 / 取消 / 任务被删时不会留半截在主文件名上
+    // rename 是原子的，全部就位才换名
+    let partFile = null;
+    let finalFile = null;
     try {
-      const ctrl = new AbortController();
-      const timer = setTimeout(() => ctrl.abort(), 5 * 60 * 1000); // 大文件最多下 5 分钟
       const res = await fetch(url, { signal: ctrl.signal });
-      if (!res.ok) {
-        clearTimeout(timer);
-        throw new Error(`视频下载失败（HTTP ${res.status}）`);
-      }
-      const buf = Buffer.from(await res.arrayBuffer());
-      clearTimeout(timer);
+      if (!res.ok) throw new Error(`视频下载失败（HTTP ${res.status}）`);
       const ct = String(res.headers.get('content-type') || '').toLowerCase();
       const ext = ct.includes('quicktime') ? '.mov' : ct.includes('webm') ? '.webm' : '.mp4';
-      const file = path.join(this.videoDir, `${task.id}${ext}`);
-      fs.writeFileSync(file, buf);
-      if (task.videoPath && task.videoPath !== file) {
+      finalFile = path.join(this.videoDir, `${task.id}${ext}`);
+      partFile = `${finalFile}.part`;
+      // 流式落盘：避免 100MB+ 视频一次性把堆占满
+      // 注意 res.body 是 WHATWG ReadableStream（fetch 的标准接口），
+      // 没有 Node Readable 的 .on() / .pipe()——必须用 Readable.fromWeb 转一道
+      await new Promise((resolve, reject) => {
+        const out = fs.createWriteStream(partFile);
+        const onError = (err) => { out.destroy(); reject(err); };
+        out.on('error', onError);
+        out.on('finish', resolve);
+        const src = Readable.fromWeb(res.body);
+        src.on('error', onError);
+        src.pipe(out);
+      });
+      clearTimeout(timer);
+      // 如果任务在下载过程中被删，自己删 .part —— 写完没机会被 remove() 接住
+      if (task._aborted) {
+        try { fs.unlinkSync(partFile); } catch { /* 已不存在 */ }
+        return false;
+      }
+      fs.renameSync(partFile, finalFile);
+      partFile = null;
+      if (task.videoPath && task.videoPath !== finalFile) {
         try { fs.unlinkSync(task.videoPath); } catch { /* 旧文件可能已不存在 */ }
       }
-      task.videoPath = file;
+      task.videoPath = finalFile;
       task.downloadError = '';
       return true;
     } catch (err) {
+      if (partFile) { try { fs.unlinkSync(partFile); } catch { /* 已不存在 */ } }
       task.downloadError = err && err.name === 'AbortError' ? '视频下载超时（5 分钟），请点击重新下载' : err.message;
       return false;
     } finally {
+      clearTimeout(timer);
       task._downloading = false;
       task.updatedAt = now();
       this._changed();

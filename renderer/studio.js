@@ -38,29 +38,6 @@ function pickAndUpload(kind) {
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = ACCEPT[kind] || ACCEPT.image;
-    input.onchange = async () => {
-      const file = input.files && input.files[0];
-      if (!file) {
-        resolve(null);
-        return;
-      }
-      try {
-        const res = await fetch(`/api/upload?kind=${encodeURIComponent(kind)}`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/octet-stream',
-            'X-File-Name': encodeURIComponent(file.name),
-          },
-          body: file,
-        });
-        const body = await res.json();
-        if (!body || !body.ok) throw new Error((body && body.error) || `上传失败（HTTP ${res.status}）`);
-        resolve(body.data); // { path, name }
-      } catch (err) {
-        reject(err);
-      }
-    };
-    // 用户取消选择时不会触发 change，这里监听窗口重新获得焦点来兜底
     let settled = false;
     const settle = (fn, v) => {
       if (settled) return;
@@ -68,14 +45,30 @@ function pickAndUpload(kind) {
       window.removeEventListener('focus', onFocus);
       fn(v);
     };
+    // 用户取消选择不会触发 change：监听窗口 focus 回来后兜底
+    // onFocus 注册在 click 之前，避免快速操作时 onchange 已 resolve 但监听还没挂上
     const onFocus = () => setTimeout(() => {
       if (!input.files || !input.files.length) settle(resolve, null);
     }, 400);
-    const origResolve = resolve;
-    const origReject = reject;
-    resolve = (v) => settle(origResolve, v);
-    reject = (e) => settle(origReject, e);
     window.addEventListener('focus', onFocus);
+    input.onchange = () => {
+      const file = input.files && input.files[0];
+      if (!file) { settle(resolve, null); return; }
+      fetch(`/api/upload?kind=${encodeURIComponent(kind)}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/octet-stream',
+          'X-File-Name': encodeURIComponent(file.name),
+        },
+        body: file,
+      })
+        .then((res) => res.json().then((body) => ({ res, body })))
+        .then(({ res, body }) => {
+          if (!body || !body.ok) throw new Error((body && body.error) || `上传失败（HTTP ${res.status}）`);
+          settle(resolve, body.data); // { path, name }
+        })
+        .catch((err) => settle(reject, err));
+    };
     input.click();
   });
 }
