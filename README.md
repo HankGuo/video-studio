@@ -264,9 +264,26 @@ v0.2.0 主面板改成"创作台 / 作品墙"双面板后我自己又跑了一�
 
 ---
 
-## 开源授权
+## 🧩 Hank 的 AI 工具矩阵
 
-本项目采用 [MIT License](LICENSE)，**商业使用完全开放**：欢迎二次开发，修改、分发、再发布均不受限制。
+VideoStudio 是 Hank 个人 / 小团队工作流中**AI 视频创作**这一环。完整矩阵：
+
+| 项目 | 角色 | 状态 |
+|---|---|---|
+| 🎬 **video-studio**（本仓库） | AI 视频创作工作流 | v0.2.x · 持续迭代 |
+| 🧠 [**agent-matrix**](https://github.com/HankGuo/agent-matrix) | Agent 注册与派单 | v0.x · 内测中 |
+| 🤝 [**open-meetup**](https://github.com/HankGuo/open-meetup) | 实时协作与分享 | v0.x · 稳定 |
+| 🌐 [**webppt**](https://github.com/HankGuo/webppt) | 内容展示与沉淀 | 在线运行 |
+
+> 公众号「**算力白肉**」会同步更新实战案例与产品决策记录。
+
+---
+
+## 📄 License
+
+本项目以 [MIT License](LICENSE) 开源。
+
+**商业使用完全自由**，保留版权与许可声明即可。如需定制开发、长期支持、API 接入、商务合作，请联系：`superai@agent.qq.com`
 
 ---
 
